@@ -30,7 +30,17 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Health check endpoint (optimized for keep-alive pings)
 app.get('/', (req, res) => res.send('✅ Splitwise backend running'));
+
+// Additional health check endpoint for monitoring services
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    service: 'Splitwise Backend'
+  });
+});
 
 // Routes
 app.use('/api/users', userRoutes);

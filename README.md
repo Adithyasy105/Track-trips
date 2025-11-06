@@ -191,6 +191,8 @@ Splitwise/
 
 4. **👉 [DEPLOYMENT_SUMMARY.md](./DEPLOYMENT_SUMMARY.md)** - Quick reference guide
 
+5. **👉 [KEEP_SERVER_AWAKE.md](./KEEP_SERVER_AWAKE.md)** - Keep Render server active 24/7 (free solutions)
+
 ## Notes
 
 - All protected routes require a valid JWT token in the Authorization header
