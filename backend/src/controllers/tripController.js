@@ -184,58 +184,103 @@ export const updateTrip = async (req, res, next) => {
   }
 };
 
-export const deleteTrip = async (req, res, next) => {
+// Helper to check if trip has unsettled balances (only trip members)
+// ✅ FINAL VERSION — Strict balance check for Supabase ARRAY or JSON column
+const checkTripMemberHasSettlements = async (trip_id, memberUsername) => {
   try {
-    const { id } = req.params;
-    const username = req.user.username;
+    // 1️⃣ Get all expenses for the trip
+    const { data: expenses, error: expErr } = await supabase
+      .from('expenses')
+      .select('payer_username, amount, participants')
+      .eq('trip_id', trip_id);
 
-    // 1️⃣ Fetch trip details including created_by
-    const { data: trip, error: tripError } = await supabase
-      .from('trips')
-      .select('group_id, created_by') // ✅ must include created_by
-      .eq('id', id)
-      .maybeSingle();
+    if (expErr) throw expErr;
 
-    if (tripError) throw tripError;
-    if (!trip) {
-      return res.status(404).json({ error: 'Trip not found' });
+    // No expenses = no settlements
+    if (!expenses || expenses.length === 0) {
+      return { hasSettlements: false, details: null };
     }
 
-    // 2️⃣ Check if user is a member of the group
-    const { data: membership, error: memberError } = await supabase
-      .from('group_members')
-      .select('*')
-      .eq('group_id', trip.group_id)
-      .eq('username', username)
-      .maybeSingle();
+    // 2️⃣ Get trip members
+    const { data: tripMembers, error: memErr } = await supabase
+      .from('trip_members')
+      .select('username')
+      .eq('trip_id', trip_id);
 
-    if (memberError) throw memberError;
-    if (!membership) {
-      return res.status(403).json({ error: 'You are not a member of this group' });
+    if (memErr) throw memErr;
+
+    const memberList = tripMembers.map(m => m.username);
+    const memberSet = new Set(memberList);
+    memberSet.add(memberUsername); // Ensure member is included
+
+    // 3️⃣ Initialize balances
+    const balances = {};
+    for (const user of memberSet) {
+      balances[user] = { paid: 0, owes: 0, net: 0 };
     }
 
-    // 3️⃣ Only the trip creator can delete
-    // 🔍 Add safe, case-insensitive comparison
-    if (trip.created_by?.trim().toLowerCase() !== username?.trim().toLowerCase()) {
-      console.log("Delete check failed:", {
-        dbValue: trip.created_by,
-        currentUser: username,
-      });
-      return res.status(403).json({ error: 'Only the trip creator can delete this trip' });
+    // 4️⃣ Compute balances
+    for (const exp of expenses) {
+      const payer = exp.payer_username;
+      const amount = parseFloat(exp.amount);
+      let participants = exp.participants;
+
+      // 🔧 FIX: handle both array and string
+      if (typeof participants === 'string') {
+        // Postgres may return `{adi,anu}` as a string
+        participants = participants
+          .replace(/[{}"]/g, '')
+          .split(',')
+          .map(x => x.trim())
+          .filter(Boolean);
+      }
+
+      if (!Array.isArray(participants) || participants.length === 0) continue;
+
+      const share = amount / participants.length;
+
+      // Add paid amount
+      if (balances[payer]) balances[payer].paid += amount;
+
+      // Add owed share
+      for (const p of participants) {
+        if (balances[p]) balances[p].owes += share;
+      }
     }
 
-    // 4️⃣ Proceed with deletion
-    const { error: deleteError } = await supabase.from('trips').delete().eq('id', id);
-    if (deleteError) throw deleteError;
+    // 5️⃣ Calculate net balances
+    for (const user of Object.keys(balances)) {
+      const paid = balances[user].paid || 0;
+      const owes = balances[user].owes || 0;
+      balances[user].net = parseFloat((paid - owes).toFixed(2));
+    }
 
-    console.log(`Trip ${id} deleted by ${username}`);
+    // 6️⃣ Get member's balance
+    const memberBalance = balances[memberUsername]?.net || 0;
 
-    res.json({ message: 'Trip deleted successfully' });
+    console.log(`[SETTLEMENT CHECK] ${memberUsername} → Paid: ${balances[memberUsername]?.paid}, Owes: ${balances[memberUsername]?.owes}, Net: ${memberBalance}`);
+
+    // 7️⃣ Block deletion if balance not zero
+    if (Math.abs(memberBalance) >= 0.01) {
+      const details = {
+        balance: memberBalance,
+        status:
+          memberBalance > 0
+            ? `User is owed ₹${memberBalance.toFixed(2)}`
+            : `User owes ₹${Math.abs(memberBalance).toFixed(2)}`
+      };
+      return { hasSettlements: true, details };
+    }
+
+    // ✅ Member fully settled
+    return { hasSettlements: false, details: null };
+
   } catch (err) {
-    console.error("Delete Trip Error:", err);
-    next(err);
+    console.error('🔥 Error checking member settlements:', err);
+    return { hasSettlements: true, details: { error: 'Unable to verify settlements' } };
   }
 };
+
 
 export const getTripMembers = async (req, res, next) => {
   try {
@@ -318,6 +363,8 @@ export const addTripMember = async (req, res, next) => {
   }
 };
 
+
+
 export const removeTripMember = async (req, res, next) => {
   try {
     const { id } = req.params; // trip id
@@ -352,6 +399,49 @@ export const removeTripMember = async (req, res, next) => {
       .eq('username', memberToRemove)
       .maybeSingle();
     if (!tripMember) return res.status(404).json({ error: 'User is not a member of this trip' });
+
+    // Check if member has active settlements in this trip
+    // This MUST block deletion if member has any non-zero balance
+    console.log(`[DEBUG] Checking settlements for member ${memberToRemove} in trip ${id}`);
+    const settlementCheck = await checkTripMemberHasSettlements(id, memberToRemove);
+    
+    console.log(`[DEBUG] Settlement check result:`, {
+      hasSettlements: settlementCheck.hasSettlements,
+      details: settlementCheck.details
+    });
+    
+    if (settlementCheck.hasSettlements) {
+      console.log(`[DEBUG] ⛔ BLOCKING removal of ${memberToRemove} due to settlements`);
+      // Format error message to match frontend expectations
+      let errorMessage = 'Cannot remove member: They have active settlements (money owed or owed to them). Please settle all balances before removing this member.';
+      
+      // Build detailed message with balance information
+      let detailMessage = `@${memberToRemove} has active settlements:`;
+      
+      if (settlementCheck.details && settlementCheck.details.balance !== undefined) {
+        const { balance } = settlementCheck.details;
+        
+        if (balance > 0) {
+          detailMessage += ` They are owed ₹${Math.abs(balance).toFixed(2)}.`;
+        } else if (balance < 0) {
+          detailMessage += ` They owe ₹${Math.abs(balance).toFixed(2)}.`;
+        }
+      }
+      
+      return res.status(400).json({ 
+        error: errorMessage,
+        title: 'Cannot Remove Member',
+        subtitle: 'Pending Settlements Detected',
+        detail: detailMessage,
+        note: 'Note: All balances must be settled to ₹0.00 before a member can be removed from the trip.',
+        member: {
+          username: memberToRemove
+        },
+        settlements: settlementCheck.details
+      });
+    }
+
+    console.log(`[DEBUG] ✅ No settlements found for ${memberToRemove}, proceeding with removal`);
 
     // Remove from trip_members
     const { error } = await supabase
@@ -401,6 +491,111 @@ export const removeTripMember = async (req, res, next) => {
 
     res.json({ message: 'Member removed from trip and related data cleaned' });
   } catch (err) {
+    next(err);
+  }
+};
+
+
+// ✅ Helper: Check if entire trip has any unsettled balances before deleting
+const checkTripHasUnsettledBalances = async (trip_id) => {
+  try {
+    const { data: members, error: memErr } = await supabase
+      .from('trip_members')
+      .select('username')
+      .eq('trip_id', trip_id);
+    if (memErr) throw memErr;
+
+    if (!members || members.length === 0)
+      return { hasUnsettled: false, details: [] };
+
+    const unsettledDetails = [];
+
+    for (const member of members) {
+      const result = await checkTripMemberHasSettlements(trip_id, member.username);
+      if (result.hasSettlements) {
+        unsettledDetails.push({
+          username: member.username,
+          ...result.details
+        });
+      }
+    }
+
+    return {
+      hasUnsettled: unsettledDetails.length > 0,
+      details: unsettledDetails
+    };
+  } catch (error) {
+    console.error('Error checking trip unsettled balances:', error);
+    return {
+      hasUnsettled: true,
+      details: [{ error: 'Unable to verify trip settlements' }]
+    };
+  }
+};
+
+
+
+// ✅ Delete a trip safely (only creator, and only if all balances are settled)
+export const deleteTrip = async (req, res, next) => {
+  try {
+    const { id } = req.params; // trip_id
+    const username = req.user.username;
+
+    // 1️⃣ Fetch trip details
+    const { data: trip, error: tripError } = await supabase
+      .from('trips')
+      .select('group_id, created_by')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (tripError) throw tripError;
+    if (!trip) {
+      return res.status(404).json({ error: 'Trip not found' });
+    }
+
+    // 2️⃣ Only trip creator can delete
+    if ((trip.created_by || '').trim().toLowerCase() !== username.trim().toLowerCase()) {
+      return res.status(403).json({ error: 'Only the trip creator can delete this trip' });
+    }
+
+    // 3️⃣ Check if any trip member has unsettled balances
+    const settlementCheck = await checkTripHasUnsettledBalances(id);
+
+    if (settlementCheck.hasUnsettled) {
+      let msg = "Cannot delete trip: Some trip members still have unsettled balances. ";
+
+      if (settlementCheck.details && settlementCheck.details.length > 0) {
+        const detailMsg = settlementCheck.details
+          .map(
+            (d) =>
+              `${d.username} ${d.balance > 0
+                ? `is owed ₹${Math.abs(d.balance).toFixed(2)}`
+                : `owes ₹${Math.abs(d.balance).toFixed(2)}`}`
+          )
+          .join('; ');
+        msg += `Details: ${detailMsg}. `;
+      }
+
+      msg += "Please settle all balances before deleting this trip.";
+
+      return res.status(400).json({
+        error: msg,
+        settlements: settlementCheck.details || [],
+      });
+    }
+
+    // 4️⃣ Safe to delete all associated data
+    await supabase.from('places_visited').delete().eq('trip_id', id);
+    await supabase.from('expenses').delete().eq('trip_id', id);
+    await supabase.from('trip_members').delete().eq('trip_id', id);
+
+    // 5️⃣ Finally, delete the trip itself
+    const { error: delTripErr } = await supabase.from('trips').delete().eq('id', id);
+    if (delTripErr) throw delTripErr;
+
+    res.json({ message: 'Trip deleted successfully' });
+  } catch (err) {
+    console.error('Delete Trip Error:', err);
     next(err);
   }
 };

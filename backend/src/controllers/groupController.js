@@ -176,7 +176,7 @@ export const getGroupMembers = async (req, res, next) => {
   }
 };
 
-// Helper function to check if a member has active settlements
+// Helper function to check if a member has active settlements and get settlement details
 const checkMemberHasSettlements = async (group_id, memberUsername) => {
   try {
     // Get all trips in the group
@@ -186,7 +186,7 @@ const checkMemberHasSettlements = async (group_id, memberUsername) => {
       .eq('group_id', group_id);
 
     if (tripsError) throw tripsError;
-    if (!trips || trips.length === 0) return false; // No trips, no settlements
+    if (!trips || trips.length === 0) return { hasSettlements: false, details: null }; // No trips, no settlements
 
     const tripIds = trips.map(t => t.id);
 
@@ -197,7 +197,7 @@ const checkMemberHasSettlements = async (group_id, memberUsername) => {
       .in('trip_id', tripIds);
 
     if (expError) throw expError;
-    if (!expenses || expenses.length === 0) return false; // No expenses, no settlements
+    if (!expenses || expenses.length === 0) return { hasSettlements: false, details: null }; // No expenses, no settlements
 
     // Get all group members
     const { data: members, error: memError } = await supabase
@@ -219,7 +219,7 @@ const checkMemberHasSettlements = async (group_id, memberUsername) => {
       const { payer_username, amount, participants } = expense;
       if (!participants || participants.length === 0) return;
       
-      const sharePerPerson = amount / participants.length;
+      const sharePerPerson = parseFloat(amount) / participants.length;
 
       // Add to paid amount
       if (balances[payer_username]) {
@@ -234,20 +234,112 @@ const checkMemberHasSettlements = async (group_id, memberUsername) => {
       });
     });
 
-    // Calculate net balance for the member to be removed
-    if (!balances[memberUsername]) return false;
-    
-    balances[memberUsername].net = balances[memberUsername].paid - balances[memberUsername].owes;
+    // Calculate net balance for all members
+    Object.keys(balances).forEach(username => {
+      balances[username].net = balances[username].paid - balances[username].owes;
+    });
+
+    // Check if member exists in balances
+    if (!balances[memberUsername]) {
+      return { hasSettlements: false, details: null };
+    }
+
+    const memberBalance = balances[memberUsername].net;
 
     // Check if member has non-zero balance (either owes or is owed money)
     // Using 0.01 as threshold to account for floating point precision
-    const hasActiveSettlements = Math.abs(balances[memberUsername].net) > 0.01;
+    const hasNonZeroBalance = Math.abs(memberBalance) > 0.01;
 
-    return hasActiveSettlements;
+    if (!hasNonZeroBalance) {
+      return { hasSettlements: false, details: null };
+    }
+
+    // Calculate actual settlements to see if member is involved in any transaction
+    const settlements = [];
+    const creditors = [];
+    const debtors = [];
+
+    // Separate creditors and debtors
+    Object.keys(balances).forEach(username => {
+      const net = balances[username].net;
+      if (net > 0.01) {
+        creditors.push({ username, amount: net });
+      } else if (net < -0.01) {
+        debtors.push({ username, amount: Math.abs(net) });
+      }
+    });
+
+    // Sort by amount (largest first)
+    creditors.sort((a, b) => b.amount - a.amount);
+    debtors.sort((a, b) => b.amount - a.amount);
+
+    // Calculate optimal settlements
+    let creditorIndex = 0;
+    let debtorIndex = 0;
+
+    while (creditorIndex < creditors.length && debtorIndex < debtors.length) {
+      const creditor = creditors[creditorIndex];
+      const debtor = debtors[debtorIndex];
+
+      const settleAmount = Math.min(creditor.amount, debtor.amount);
+
+      if (settleAmount > 0.01) {
+        settlements.push({
+          from: debtor.username,
+          to: creditor.username,
+          amount: parseFloat(settleAmount.toFixed(2))
+        });
+      }
+
+      creditor.amount -= settleAmount;
+      debtor.amount -= settleAmount;
+
+      if (creditor.amount < 0.01) creditorIndex++;
+      if (debtor.amount < 0.01) debtorIndex++;
+    }
+
+    // Check if member is involved in any settlement transaction
+    const memberInvolvedInSettlements = settlements.some(settlement => 
+      settlement.from === memberUsername || settlement.to === memberUsername
+    );
+
+    // Get settlement details for the member
+    const memberSettlements = settlements.filter(settlement => 
+      settlement.from === memberUsername || settlement.to === memberUsername
+    );
+
+    // Build detailed message
+    let details = null;
+    if (memberInvolvedInSettlements) {
+      const owesList = memberSettlements
+        .filter(s => s.from === memberUsername)
+        .map(s => `${s.to} ($${s.amount.toFixed(2)})`)
+        .join(', ');
+      
+      const owedByList = memberSettlements
+        .filter(s => s.to === memberUsername)
+        .map(s => `${s.from} ($${s.amount.toFixed(2)})`)
+        .join(', ');
+
+      details = {
+        balance: parseFloat(memberBalance.toFixed(2)),
+        owes: owesList || null,
+        owedBy: owedByList || null,
+        settlementCount: memberSettlements.length
+      };
+    }
+
+    return {
+      hasSettlements: memberInvolvedInSettlements || hasNonZeroBalance,
+      details
+    };
   } catch (error) {
     // If there's an error checking settlements, be safe and prevent deletion
     console.error('Error checking settlements:', error);
-    return true; // Assume they have settlements to be safe
+    return { 
+      hasSettlements: true, 
+      details: { error: 'Unable to verify settlements' } 
+    }; // Assume they have settlements to be safe
   }
 };
 
@@ -287,10 +379,39 @@ export const removeGroupMember = async (req, res, next) => {
     if (!membership) return res.status(404).json({ error: 'User is not a member of the group' });
 
     // Check if member has active settlements (owes money or is owed money)
-    const hasSettlements = await checkMemberHasSettlements(group_id, memberToRemove);
-    if (hasSettlements) {
+    const settlementCheck = await checkMemberHasSettlements(group_id, memberToRemove);
+    if (settlementCheck.hasSettlements) {
+      let errorMessage = 'Cannot remove member: This user has pending settlements. ';
+      
+      if (settlementCheck.details) {
+        const { balance, owes, owedBy, settlementCount } = settlementCheck.details;
+        
+        if (balance !== undefined) {
+          if (balance > 0) {
+            errorMessage += `They are owed $${Math.abs(balance).toFixed(2)}. `;
+          } else {
+            errorMessage += `They owe $${Math.abs(balance).toFixed(2)}. `;
+          }
+        }
+        
+        if (owes) {
+          errorMessage += `Pending payments: ${owes}. `;
+        }
+        
+        if (owedBy) {
+          errorMessage += `Pending receipts: ${owedBy}. `;
+        }
+        
+        if (settlementCount > 0) {
+          errorMessage += `They are involved in ${settlementCount} settlement transaction(s). `;
+        }
+      }
+      
+      errorMessage += 'Please settle all balances before removing this member.';
+      
       return res.status(400).json({ 
-        error: 'Cannot remove member: They have active settlements (money owed or owed to them). Please settle all balances before removing this member.' 
+        error: errorMessage,
+        settlements: settlementCheck.details
       });
     }
 

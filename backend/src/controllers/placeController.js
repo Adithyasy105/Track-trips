@@ -91,14 +91,30 @@ export const getTripPlaces = async (req, res, next) => {
       return res.status(403).json({ error: 'You are not a member of this group' });
     }
 
-    const { data, error } = await supabase
+    // Get trip members to filter places
+    const { data: tripMembers, error: tripMemError } = await supabase
+      .from('trip_members')
+      .select('username')
+      .eq('trip_id', trip_id);
+
+    if (tripMemError) throw tripMemError;
+    const tripMemberUsernames = new Set((tripMembers || []).map(m => m.username));
+
+    // Get all places for the trip
+    const { data: allPlaces, error: placesError } = await supabase
       .from('places_visited')
       .select('*')
       .eq('trip_id', trip_id)
       .order('visited_time', { ascending: false });
 
-    if (error) throw error;
-    res.json(data);
+    if (placesError) throw placesError;
+
+    // Filter places to only include those created by trip members
+    const filteredPlaces = (allPlaces || []).filter(place => 
+      place.created_by && tripMemberUsernames.has(place.created_by)
+    );
+
+    res.json(filteredPlaces);
   } catch (err) {
     next(err);
   }

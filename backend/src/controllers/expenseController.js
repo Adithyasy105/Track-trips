@@ -30,13 +30,13 @@ export const addExpense = async (req, res, next) => {
       return res.status(403).json({ error: 'You are not a member of this group' });
     }
 
-    // Verify all participants are members
-    const { data: allMembers } = await supabase
-      .from('group_members')
+    // Verify all participants are trip members
+    const { data: tripMembers } = await supabase
+      .from('trip_members')
       .select('username')
-      .eq('group_id', trip.group_id);
+      .eq('trip_id', trip_id);
 
-    const memberUsernames = allMembers.map(m => m.username);
+    const memberUsernames = tripMembers.map(m => m.username);
     const invalidParticipants = participants.filter(p => !memberUsernames.includes(p));
 
     if (invalidParticipants.length > 0) {
@@ -88,15 +88,38 @@ export const getTripExpenses = async (req, res, next) => {
       return res.status(403).json({ error: 'You are not a member of this group' });
     }
 
+    // Get trip members to filter expenses
+    const { data: tripMembers, error: tripMemError } = await supabase
+      .from('trip_members')
+      .select('username')
+      .eq('trip_id', trip_id);
+
+    if (tripMemError) throw tripMemError;
+    const tripMemberUsernames = new Set((tripMembers || []).map(m => m.username));
+
     // Get expenses
-    const { data, error } = await supabase
+    const { data: allExpenses, error } = await supabase
       .from('expenses')
       .select('*')
       .eq('trip_id', trip_id)
       .order('timestamp', { ascending: false });
 
     if (error) throw error;
-    res.json(data);
+
+    // Filter expenses to only include those where payer and all participants are trip members
+    const filteredExpenses = (allExpenses || []).filter(expense => {
+      // Check if payer is a trip member
+      if (!tripMemberUsernames.has(expense.payer_username)) {
+        return false;
+      }
+      // Check if all participants are trip members
+      if (expense.participants && expense.participants.length > 0) {
+        return expense.participants.every(p => tripMemberUsernames.has(p));
+      }
+      return true;
+    });
+
+    res.json(filteredExpenses);
   } catch (err) {
     next(err);
   }

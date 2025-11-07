@@ -14,6 +14,7 @@ export const MembersTab = ({ tripId, trip }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [targetMember, setTargetMember] = useState(null);
   const [confirmText, setConfirmText] = useState('');
+  const [settlementError, setSettlementError] = useState(null);
 
   useEffect(() => {
     loadMembers();
@@ -45,9 +46,22 @@ export const MembersTab = ({ tripId, trip }) => {
       setRemoving(username);
       await tripsAPI.removeMember(trip.id, username);
       toast.success('Member removed from trip');
+      setConfirmOpen(false);
+      setTargetMember(null);
+      setConfirmText('');
       loadMembers();
     } catch (e) {
-      toast.error(e.response?.data?.error || 'Failed to remove member');
+      // Check if error is related to settlements
+      if (e.response?.data?.settlements || e.response?.data?.error?.includes('settlement')) {
+        setSettlementError({
+          member: targetMember || { username },
+          message: e.response?.data?.error || 'Member has pending settlements',
+          details: e.response?.data?.settlements
+        });
+        setConfirmOpen(false);
+      } else {
+        toast.error(e.response?.data?.error || 'Failed to remove member');
+      }
     } finally {
       setRemoving(null);
     }
@@ -210,6 +224,76 @@ export const MembersTab = ({ tripId, trip }) => {
                 {removing === targetMember?.username ? 'Removing…' : 'Remove'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settlement Error Modal */}
+      {settlementError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900 flex items-center justify-center">
+                <FaUsers className="text-yellow-600 dark:text-yellow-400 text-xl" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Cannot Remove Member</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Pending Settlements in This Trip</p>
+              </div>
+            </div>
+            
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
+              <p className="text-sm text-gray-800 dark:text-gray-200 font-medium mb-2">
+                @{settlementError.member?.username} has active settlements in this trip:
+              </p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">
+                {settlementError.message}
+              </p>
+            </div>
+
+            {settlementError.details && (
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-4">
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Settlement Details:</p>
+                {settlementError.details.balance !== undefined && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="font-medium">Balance:</span>{' '}
+                    {settlementError.details.balance > 0 ? (
+                      <span className="text-green-600 dark:text-green-400">+${Math.abs(settlementError.details.balance).toFixed(2)} (owed to them)</span>
+                    ) : (
+                      <span className="text-red-600 dark:text-red-400">-${Math.abs(settlementError.details.balance).toFixed(2)} (they owe)</span>
+                    )}
+                  </p>
+                )}
+                {settlementError.details.owes && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <span className="font-medium">Owes to:</span> {settlementError.details.owes}
+                  </p>
+                )}
+                {settlementError.details.owedBy && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <span className="font-medium">Owed by:</span> {settlementError.details.owedBy}
+                  </p>
+                )}
+                {settlementError.details.settlementCount > 0 && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <span className="font-medium">Active transactions:</span> {settlementError.details.settlementCount}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+              <p className="text-xs text-blue-800 dark:text-blue-200">
+                <strong>Note:</strong> All balances in this trip must be settled to $0.00 before a member can be removed from the trip.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setSettlementError(null)}
+              className="w-full btn-primary"
+            >
+              Understood
+            </button>
           </div>
         </div>
       )}

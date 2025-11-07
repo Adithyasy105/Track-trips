@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { FaPlus, FaTrash, FaDollarSign } from 'react-icons/fa';
-import { expensesAPI, groupsAPI, tripsAPI } from '../../services/api';
+import { expensesAPI, tripsAPI } from '../../services/api';
 import { AddExpenseModal } from './AddExpenseModal';
 
 export const ExpensesTab = ({ tripId }) => {
@@ -17,12 +17,8 @@ export const ExpensesTab = ({ tripId }) => {
 
   const loadMembers = useCallback(async () => {
     try {
-      const tripRes = await tripsAPI.getById(tripId);
-      const groupId = tripRes.data.groups?.id || tripRes.data.group_id;
-      if (groupId) {
-        const membersRes = await groupsAPI.getMembers(groupId);
-        setMembers(membersRes.data);
-      }
+      const membersRes = await tripsAPI.getMembers(tripId);
+      setMembers(membersRes.data || []);
     } catch (error) {
       console.error('Failed to load members', error);
     }

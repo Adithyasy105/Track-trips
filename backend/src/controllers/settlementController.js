@@ -38,32 +38,64 @@ export const getTripSettlements = async (req, res, next) => {
 
     if (expError) throw expError;
 
-    // Get all group members
+    // Get all trip members
     const { data: members, error: memError } = await supabase
-      .from('group_members')
+      .from('trip_members')
       .select('username')
-      .eq('group_id', trip.group_id);
+      .eq('trip_id', trip_id);
 
     if (memError) throw memError;
-    const memberUsernames = members.map(m => m.username);
+    // Ensure we have a valid array and create Set of trip member usernames
+    const memberUsernames = new Set((members || []).map(m => m.username));
+    
+    // If no trip members, return empty response
+    if (memberUsernames.size === 0) {
+      return res.json({
+        balances: {},
+        settlements: [],
+        summary: {
+          total_expenses: 0,
+          total_expenses_count: 0
+        }
+      });
+    }
 
-    // Calculate balances: how much each person owes/paid
+    // Filter expenses to only include those where payer and all participants are trip members
+    const validExpenses = expenses.filter(expense => {
+      // Check if payer is a trip member
+      if (!memberUsernames.has(expense.payer_username)) {
+        return false;
+      }
+      // Check if all participants are trip members
+      if (expense.participants && expense.participants.length > 0) {
+        return expense.participants.every(p => memberUsernames.has(p));
+      }
+      return true;
+    });
+
+    // Calculate balances: how much each person owes/paid (only trip members)
     const balances = {};
-    memberUsernames.forEach(username => {
+    Array.from(memberUsernames).forEach(username => {
       balances[username] = { paid: 0, owes: 0, net: 0 };
     });
 
-    // Process each expense
-    expenses.forEach(expense => {
+    // Process each valid expense
+    validExpenses.forEach(expense => {
       const { payer_username, amount, participants } = expense;
+      if (!participants || participants.length === 0) return;
+      
       const sharePerPerson = amount / participants.length;
 
-      // Add to paid amount
-      balances[payer_username].paid += amount;
+      // Add to paid amount - only if payer is a trip member
+      if (balances[payer_username]) {
+        balances[payer_username].paid += amount;
+      }
 
-      // Add to owes amount for each participant
+      // Add to owes amount for each participant - only if participant is a trip member
       participants.forEach(participant => {
-        balances[participant].owes += sharePerPerson;
+        if (balances[participant]) {
+          balances[participant].owes += sharePerPerson;
+        }
       });
     });
 
@@ -72,14 +104,35 @@ export const getTripSettlements = async (req, res, next) => {
       balances[username].net = balances[username].paid - balances[username].owes;
     });
 
-    // Calculate settlements (who owes whom)
+    // Filter balances to ONLY include trip members (remove any non-trip members)
+    // This is a critical safety check - ensure ONLY trip members are in the response
+    const filteredBalances = {};
+    memberUsernames.forEach(username => {
+      // Only add if username exists in balances AND is a trip member
+      if (balances.hasOwnProperty(username)) {
+        filteredBalances[username] = {
+          paid: balances[username].paid || 0,
+          owes: balances[username].owes || 0,
+          net: balances[username].net || 0
+        };
+      }
+    });
+    
+    // Double-check: Remove any keys that aren't in trip members (safety net)
+    Object.keys(filteredBalances).forEach(key => {
+      if (!memberUsernames.has(key)) {
+        delete filteredBalances[key];
+      }
+    });
+
+    // Calculate settlements (who owes whom) - only from trip members
     const settlements = [];
     const creditors = [];
     const debtors = [];
 
-    // Separate creditors and debtors
-    Object.keys(balances).forEach(username => {
-      const net = balances[username].net;
+    // Separate creditors and debtors (only trip members)
+    Object.keys(filteredBalances).forEach(username => {
+      const net = filteredBalances[username].net;
       if (net > 0.01) {
         creditors.push({ username, amount: net });
       } else if (net < -0.01) {
@@ -116,12 +169,21 @@ export const getTripSettlements = async (req, res, next) => {
       if (debtor.amount < 0.01) debtorIndex++;
     }
 
+    // Final safety check: Ensure response only contains trip members
+    // Create a clean response object with ONLY trip members
+    const finalBalances = {};
+    memberUsernames.forEach(username => {
+      if (filteredBalances[username]) {
+        finalBalances[username] = filteredBalances[username];
+      }
+    });
+
     res.json({
-      balances,
+      balances: finalBalances, // Only trip members - guaranteed
       settlements,
       summary: {
-        total_expenses: expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0),
-        total_expenses_count: expenses.length
+        total_expenses: validExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0),
+        total_expenses_count: validExpenses.length
       }
     });
   } catch (err) {

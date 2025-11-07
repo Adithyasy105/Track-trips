@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaTimes } from 'react-icons/fa';
 import toast from 'react-hot-toast';
-import { expensesAPI, groupsAPI, tripsAPI } from '../../services/api';
+import { expensesAPI, tripsAPI } from '../../services/api';
 
 export const AddExpenseModal = ({ isOpen, onClose, onSuccess, tripId, members: initialMembers }) => {
   const [formData, setFormData] = useState({
@@ -25,13 +25,8 @@ export const AddExpenseModal = ({ isOpen, onClose, onSuccess, tripId, members: i
 
   const loadMembers = async () => {
     try {
-      // Get trip to find group_id
-      const tripRes = await tripsAPI.getById(tripId);
-      const groupId = tripRes.data.groups?.id || tripRes.data.group_id;
-      if (groupId) {
-        const membersRes = await groupsAPI.getMembers(groupId);
-        setMembers(membersRes.data);
-      }
+      const membersRes = await tripsAPI.getMembers(tripId);
+      setMembers(membersRes.data || []);
     } catch (error) {
       console.error('Failed to load members', error);
     }
