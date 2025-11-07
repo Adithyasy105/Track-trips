@@ -176,6 +176,81 @@ export const getGroupMembers = async (req, res, next) => {
   }
 };
 
+// Helper function to check if a member has active settlements
+const checkMemberHasSettlements = async (group_id, memberUsername) => {
+  try {
+    // Get all trips in the group
+    const { data: trips, error: tripsError } = await supabase
+      .from('trips')
+      .select('id')
+      .eq('group_id', group_id);
+
+    if (tripsError) throw tripsError;
+    if (!trips || trips.length === 0) return false; // No trips, no settlements
+
+    const tripIds = trips.map(t => t.id);
+
+    // Get all expenses for all trips in the group
+    const { data: expenses, error: expError } = await supabase
+      .from('expenses')
+      .select('*')
+      .in('trip_id', tripIds);
+
+    if (expError) throw expError;
+    if (!expenses || expenses.length === 0) return false; // No expenses, no settlements
+
+    // Get all group members
+    const { data: members, error: memError } = await supabase
+      .from('group_members')
+      .select('username')
+      .eq('group_id', group_id);
+
+    if (memError) throw memError;
+    const memberUsernames = members.map(m => m.username);
+
+    // Calculate balances: how much each person owes/paid
+    const balances = {};
+    memberUsernames.forEach(username => {
+      balances[username] = { paid: 0, owes: 0, net: 0 };
+    });
+
+    // Process each expense
+    expenses.forEach(expense => {
+      const { payer_username, amount, participants } = expense;
+      if (!participants || participants.length === 0) return;
+      
+      const sharePerPerson = amount / participants.length;
+
+      // Add to paid amount
+      if (balances[payer_username]) {
+        balances[payer_username].paid += parseFloat(amount);
+      }
+
+      // Add to owes amount for each participant
+      participants.forEach(participant => {
+        if (balances[participant]) {
+          balances[participant].owes += sharePerPerson;
+        }
+      });
+    });
+
+    // Calculate net balance for the member to be removed
+    if (!balances[memberUsername]) return false;
+    
+    balances[memberUsername].net = balances[memberUsername].paid - balances[memberUsername].owes;
+
+    // Check if member has non-zero balance (either owes or is owed money)
+    // Using 0.01 as threshold to account for floating point precision
+    const hasActiveSettlements = Math.abs(balances[memberUsername].net) > 0.01;
+
+    return hasActiveSettlements;
+  } catch (error) {
+    // If there's an error checking settlements, be safe and prevent deletion
+    console.error('Error checking settlements:', error);
+    return true; // Assume they have settlements to be safe
+  }
+};
+
 // Creator-only: remove a member from the group
 export const removeGroupMember = async (req, res, next) => {
   try {
@@ -210,6 +285,14 @@ export const removeGroupMember = async (req, res, next) => {
       .eq('username', memberToRemove)
       .maybeSingle();
     if (!membership) return res.status(404).json({ error: 'User is not a member of the group' });
+
+    // Check if member has active settlements (owes money or is owed money)
+    const hasSettlements = await checkMemberHasSettlements(group_id, memberToRemove);
+    if (hasSettlements) {
+      return res.status(400).json({ 
+        error: 'Cannot remove member: They have active settlements (money owed or owed to them). Please settle all balances before removing this member.' 
+      });
+    }
 
     const { error } = await supabase
       .from('group_members')
