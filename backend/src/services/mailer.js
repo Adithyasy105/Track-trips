@@ -48,8 +48,12 @@ if (EMAIL_PROVIDER === 'resend') {
 
   if (!SMTP_USER || !SMTP_PASS) {
     console.error('[mailer] ❌ ERROR: SMTP credentials are not set! Password reset emails will fail.');
-    console.error('  Please set SMTP_USER and SMTP_PASS in your .env file');
+    console.error('  Please set SMTP_USER and SMTP_PASS in your .env file or Render environment variables.');
   } else {
+    if (SMTP_HOST.includes('gmail.com')) {
+      console.log('[mailer] ℹ️ Gmail SMTP note: use a Gmail address plus a 16-character app password, not the normal account password.');
+      console.log('  If this is running on Render, set the values in Render → Environment → Variables and redeploy.');
+    }
     transporter = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
@@ -135,6 +139,10 @@ export const sendMail = async ({ to, subject, html }) => {
     console.error('  Error:', error.message);
     console.error('  Code:', error.code);
     console.error('  Command:', error.command);
+    if (SMTP_HOST.includes('gmail.com') && (error.code === 'EAUTH' || String(error.message).toLowerCase().includes('auth'))) {
+      console.error('[mailer] 🔐 Gmail SMTP auth failed. Common cause: the Gmail account password was used instead of a 16-character App Password, or the Render env vars are not loaded.');
+      console.error('  Fix: set SMTP_USER to the Gmail address and SMTP_PASS to the Gmail App Password, then redeploy the app.');
+    }
     if (error.response) {
       console.error('  Server Response:', error.response);
     }
