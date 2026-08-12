@@ -2721,6 +2721,9 @@ const LiveInviteQR = ({
   const [loading, setLoading] =
     useState(false);
 
+  const [error, setError] =
+    useState(null);
+
   const qrWrapperRef =
     useRef(null);
 
@@ -2749,11 +2752,16 @@ const LiveInviteQR = ({
     async () => {
       try {
         setLoading(true);
+        setError(null);
+
+        console.log('[QR] Fetching invite for groupId:', groupId);
 
         const response =
           await groupsAPI.createInvite(
             groupId
           );
+
+        console.log('[QR] Invite response:', response);
 
         setUrl(
           buildUrl(
@@ -2762,9 +2770,11 @@ const LiveInviteQR = ({
         );
       } catch (error) {
         console.error(
-          'Failed to generate QR:',
+          '[QR] Failed to generate QR:',
           error
         );
+        const errorMsg = error.response?.data?.error || error.message || 'Failed to generate invite link';
+        setError(errorMsg);
       } finally {
         setLoading(false);
       }
@@ -2875,7 +2885,34 @@ const LiveInviteQR = ({
 
       {/* QR */}
 
-      {url ? (
+      {error ? (
+        <div className="
+          flex
+          h-[160px]
+          w-[160px]
+          flex-col
+          items-center
+          justify-center
+          rounded-2xl
+          bg-red-50
+          text-xs
+          text-red-600
+          shadow-sm
+          p-3
+          text-center
+        ">
+          <div className="font-semibold mb-2">⚠️ Error</div>
+          <div className="text-[10px] mb-2">{error}</div>
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={loading}
+            className="text-[10px] underline hover:text-red-700"
+          >
+            {loading ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      ) : url ? (
         <div
           ref={qrWrapperRef}
           className="
