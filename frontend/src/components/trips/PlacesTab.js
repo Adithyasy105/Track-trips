@@ -700,76 +700,41 @@ export const PlacesTab = ({ tripId }) => {
             inset-y-0
             left-1/2
             hidden
-            w-[180px]
+            w-[72px]
             -translate-x-1/2
             md:block
           "
           aria-hidden="true"
         >
 
-          <svg
-            viewBox="0 0 180 1000"
-            preserveAspectRatio="none"
-            className="h-full w-full"
-          >
+          <div className="
+            absolute
+            inset-y-0
+            left-1/2
+            w-px
+            -translate-x-1/2
+            bg-gradient-to-b
+            from-transparent
+            via-sky-300/30
+            to-transparent
+            dark:via-sky-500/25
+          " />
 
-            {/* ROAD GLOW */}
-
-            <path
-              d="
-                M90 0
-                C90 65 145 80 145 150
-                C145 220 35 230 35 300
-                C35 370 145 380 145 450
-                C145 520 35 530 35 600
-                C35 670 145 680 145 750
-                C145 820 90 850 90 1000
-              "
-              fill="none"
-              stroke="rgba(14,165,233,0.10)"
-              strokeWidth="44"
-              strokeLinecap="round"
-            />
-
-            {/* ROAD */}
-
-            <path
-              d="
-                M90 0
-                C90 65 145 80 145 150
-                C145 220 35 230 35 300
-                C35 370 145 380 145 450
-                C145 520 35 530 35 600
-                C35 670 145 680 145 750
-                C145 820 90 850 90 1000
-              "
-              fill="none"
-              stroke="#1e293b"
-              strokeWidth="30"
-              strokeLinecap="round"
-              className="dark:stroke-slate-600"
-            />
-
-            {/* ROAD DASHES */}
-
-            <path
-              d="
-                M90 0
-                C90 65 145 80 145 150
-                C145 220 35 230 35 300
-                C35 370 145 380 145 450
-                C145 520 35 530 35 600
-                C35 670 145 680 145 750
-                C145 820 90 850 90 1000
-              "
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="2.5"
-              strokeDasharray="10 14"
-              strokeLinecap="round"
-            />
-
-          </svg>
+          <div className="
+            absolute
+            inset-y-[10%]
+            left-1/2
+            w-[2px]
+            -translate-x-1/2
+            rounded-full
+            bg-gradient-to-b
+            from-sky-300/20
+            via-slate-400/50
+            to-sky-300/20
+            dark:from-sky-500/20
+            dark:via-slate-500/60
+            dark:to-sky-500/20
+          " />
 
         </div>
 
@@ -784,75 +749,38 @@ export const PlacesTab = ({ tripId }) => {
             inset-y-0
             left-0
             block
-            w-[62px]
+            w-[34px]
             md:hidden
           "
           aria-hidden="true"
         >
 
-          <svg
-            viewBox="0 0 62 1000"
-            preserveAspectRatio="none"
-            className="h-full w-full"
-          >
+          <div className="
+            absolute
+            inset-y-0
+            left-[18px]
+            w-px
+            bg-gradient-to-b
+            from-transparent
+            via-sky-300/30
+            to-transparent
+            dark:via-sky-500/25
+          " />
 
-            {/* GLOW */}
-
-            <path
-              d="
-                M31 0
-                C31 65 48 80 48 145
-                C48 215 14 230 14 300
-                C14 370 48 385 48 450
-                C48 520 14 535 14 600
-                C14 670 48 685 48 750
-                C48 820 31 850 31 1000
-              "
-              fill="none"
-              stroke="rgba(14,165,233,0.10)"
-              strokeWidth="30"
-              strokeLinecap="round"
-            />
-
-            {/* ROAD */}
-
-            <path
-              d="
-                M31 0
-                C31 65 48 80 48 145
-                C48 215 14 230 14 300
-                C14 370 48 385 48 450
-                C48 520 14 535 14 600
-                C14 670 48 685 48 750
-                C48 820 31 850 31 1000
-              "
-              fill="none"
-              stroke="#1e293b"
-              strokeWidth="21"
-              strokeLinecap="round"
-              className="dark:stroke-slate-600"
-            />
-
-            {/* DASHES */}
-
-            <path
-              d="
-                M31 0
-                C31 65 48 80 48 145
-                C48 215 14 230 14 300
-                C14 370 48 385 48 450
-                C48 520 14 535 14 600
-                C14 670 48 685 48 750
-                C48 820 31 850 31 1000
-              "
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="2"
-              strokeDasharray="8 11"
-              strokeLinecap="round"
-            />
-
-          </svg>
+          <div className="
+            absolute
+            inset-y-[10%]
+            left-[18px]
+            w-[2px]
+            rounded-full
+            bg-gradient-to-b
+            from-sky-300/20
+            via-slate-400/50
+            to-sky-300/20
+            dark:from-sky-500/20
+            dark:via-slate-500/60
+            dark:to-sky-500/20
+          " />
 
         </div>
 
@@ -957,8 +885,8 @@ export const PlacesTab = ({ tripId }) => {
                     top-1/2
                     z-30
                     hidden
-                    h-14
-                    w-14
+                    h-12
+                    w-12
                     -translate-x-1/2
                     -translate-y-1/2
                     items-center
@@ -966,7 +894,7 @@ export const PlacesTab = ({ tripId }) => {
                     rounded-full
                     border-4
                     border-white
-                    text-base
+                    text-sm
                     font-black
                     text-white
                     shadow-xl
@@ -986,7 +914,7 @@ export const PlacesTab = ({ tripId }) => {
                   className={`
                     w-full
                     pl-[58px]
-                    md:w-[47%]
+                    md:w-[48%]
                     md:pl-0
                     ${
                       isLeft
