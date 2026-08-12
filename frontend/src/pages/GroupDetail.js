@@ -284,17 +284,28 @@ export const GroupDetail = () => {
       const inviteUrl =
         buildInviteUrl(token);
 
-      await navigator.clipboard.writeText(
-        inviteUrl
-      );
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(
+          inviteUrl
+        );
+      } else {
+        // Fallback for older browsers or non-HTTPS contexts
+        const textArea = document.createElement('textarea');
+        textArea.value = inviteUrl;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
 
       toast.success(
         'Invite link copied to clipboard'
       );
     } catch (error) {
+      console.error('Copy error:', error);
       toast.error(
         error.response?.data?.error ||
-        'Failed to create invite'
+        'Failed to copy invite link'
       );
     } finally {
       setCopyingInvite(false);
@@ -310,12 +321,23 @@ export const GroupDetail = () => {
     try {
       setCopyingId(true);
 
-      await navigator.clipboard.writeText(id);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(id);
+      } else {
+        // Fallback for older browsers or non-HTTPS contexts
+        const textArea = document.createElement('textarea');
+        textArea.value = id;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
 
       toast.success(
         'Group ID copied'
       );
     } catch (error) {
+      console.error('Copy error:', error);
       toast.error(
         'Failed to copy Group ID'
       );
@@ -2756,7 +2778,7 @@ const LiveInviteQR = ({
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [groupId]);
 
 
   const downloadQR = () => {
