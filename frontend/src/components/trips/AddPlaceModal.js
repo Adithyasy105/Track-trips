@@ -23,6 +23,42 @@ import toast from 'react-hot-toast';
 import { placesAPI } from '../../services/api';
 
 
+const SUPPORTED_IMAGE_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/bmp',
+  'image/svg+xml',
+  'image/tiff',
+  'image/heic',
+  'image/heif',
+  'image/avif'
+];
+
+const SUPPORTED_IMAGE_EXTENSIONS = [
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg', 'tif', 'tiff', 'heic', 'heif', 'avif'
+];
+
+const isSupportedImageFile = (file) => {
+  if (!file) {
+    return false;
+  }
+
+  const mimeType = (file.type || '').toLowerCase();
+  const fileName = (file.name || '').toLowerCase();
+  const extension = fileName.split('.').pop();
+
+  return (
+    mimeType.startsWith('image/') ||
+    SUPPORTED_IMAGE_EXTENSIONS.includes(extension)
+  ) && (
+    SUPPORTED_IMAGE_MIME_TYPES.includes(mimeType) ||
+    mimeType.startsWith('image/') ||
+    SUPPORTED_IMAGE_EXTENSIONS.includes(extension)
+  );
+};
+
 const AddPlaceModal = ({
   isOpen,
   onClose,
@@ -42,6 +78,7 @@ const AddPlaceModal = ({
 
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
+  const [photoPreviewError, setPhotoPreviewError] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -365,19 +402,13 @@ const AddPlaceModal = ({
       return;
     }
 
-
-    if (
-      !file.type ||
-      !file.type.startsWith('image/')
-    ) {
-
+    if (!isSupportedImageFile(file)) {
       toast.error(
-        'Please select a valid image file.'
+        'Please select a valid image file (JPG, PNG, WebP, GIF, SVG, TIFF, HEIC, AVIF, or other common image format).'
       );
 
       return;
     }
-
 
     // Remove old object URL
     if (photoPreview) {
@@ -390,6 +421,7 @@ const AddPlaceModal = ({
 
     // Store photo
     setPhotoFile(file);
+    setPhotoPreviewError(false);
 
 
     // Create preview
@@ -434,6 +466,7 @@ const AddPlaceModal = ({
     }
 
     setPhotoPreview('');
+    setPhotoPreviewError(false);
     setPhotoFile(null);
   };
 
@@ -1187,13 +1220,13 @@ const AddPlaceModal = ({
 
                     type="file"
 
-                    accept="image/*"
+                    accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.svg,.tif,.tiff,.heic,.heif,.avif,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/svg+xml,image/tiff,image/heic,image/heif,image/avif"
 
-                    onChange={(e) =>
-                      handlePhotoSelection(
-                        e.target.files?.[0]
-                      )
-                    }
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      handlePhotoSelection(file);
+                      e.target.value = '';
+                    }}
 
                     className="hidden"
                   />
@@ -1220,20 +1253,42 @@ const AddPlaceModal = ({
                       "
                     >
 
-                      <img
+                      {!photoPreviewError ? (
+                        <img
 
-                        src={
-                          photoPreview
-                        }
+                          src={
+                            photoPreview
+                          }
 
-                        alt="Selected place"
+                          alt="Selected place"
 
-                        className="
-                          h-full
-                          w-full
-                          object-cover
-                        "
-                      />
+                          onError={() => {
+                            setPhotoPreviewError(true);
+                          }}
+
+                          className="
+                            h-full
+                            w-full
+                            object-cover
+                          "
+                        />
+                      ) : (
+                        <div
+                          className="
+                            flex
+                            h-full
+                            w-full
+                            items-center
+                            justify-center
+                            bg-gray-100
+                            text-gray-500
+                            dark:bg-gray-700
+                            dark:text-gray-300
+                          "
+                        >
+                          <FaImage className="h-5 w-5" />
+                        </div>
+                      )}
 
 
                       <button

@@ -55,25 +55,17 @@ export const TripDetail = () => {
   const tabRefs = useRef({});
   const navContainerRef = useRef(null);
 
-  const handleRealtimeExpenseAdded = useCallback((expense) => {
+  // Silently refresh data on real-time updates without showing notifications
+  const handleRealtimeExpenseAdded = useCallback(() => {
     setRefreshKey(k => k + 1);
-    if (expense?.payer_username && user?.username && expense.payer_username.toLowerCase() === user.username.toLowerCase()) {
-      return;
-    }
-    toast.success(`⚡ Real-time update: New expense "${expense?.description || 'added'}" by @${expense?.payer_username || 'a member'}`, { id: `realtime-${expense?.id}` });
-  }, [user]);
+  }, []);
 
-  const handleRealtimeExpenseDeleted = useCallback(({ id: expId, deleted_by }) => {
+  const handleRealtimeExpenseDeleted = useCallback(() => {
     setRefreshKey(k => k + 1);
-    if (deleted_by && user?.username && deleted_by.toLowerCase() === user.username.toLowerCase()) {
-      return;
-    }
-    toast.success('⚡ Real-time update: An expense was deleted', { id: `realtime-del-${expId}` });
-  }, [user]);
+  }, []);
 
   const handleRealtimeSettlementUpdated = useCallback(() => {
     setRefreshKey(k => k + 1);
-    toast.success('⚡ Real-time update: Trip settlement status updated!');
   }, []);
 
   useSocket(id, handleRealtimeExpenseAdded, handleRealtimeExpenseDeleted, handleRealtimeSettlementUpdated);
