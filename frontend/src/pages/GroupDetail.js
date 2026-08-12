@@ -2778,7 +2778,7 @@ const LiveInviteQR = ({
 
   useEffect(() => {
     refresh();
-  }, [groupId]);
+  }, [groupId, refresh]);
 
 
   const downloadQR = () => {
