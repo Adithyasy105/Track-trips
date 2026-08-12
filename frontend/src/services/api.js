@@ -11,23 +11,27 @@ import axios from 'axios';
 // };
 
 const getApiBaseUrl = () => {
-  // 1️⃣ If .env variable is explicitly set, use it
   const envUrl = process.env.REACT_APP_API_URL;
   if (envUrl) {
-    const clean = envUrl.trim().replace(/\/$/, ''); // remove trailing slash
+    const clean = envUrl.trim().replace(/\/$/, '');
     return clean.endsWith('/api') ? clean : `${clean}/api`;
   }
 
-  // 2️⃣ If frontend runs locally → use local backend
-  if (
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1')
-  ) {
-    return 'http://localhost:5000/api'; // 👈 use your backend’s local port
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location;
+    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isTunnelHost = hostname.includes('devtunnels.ms') || hostname.includes('localtunnel.me') || hostname.includes('ngrok-free.app') || hostname.includes('trycloudflare.com');
+
+    if (isLocalHost) {
+      return 'http://localhost:5000/api';
+    }
+
+    if (isTunnelHost) {
+      const backendHostname = hostname.replace(/-(\d+)\./, '-5000.');
+      return `${protocol}//${backendHostname}/api`;
+    }
   }
 
-  // 3️⃣ Otherwise → use deployed Render backend
   return 'https://track-trips.onrender.com/api';
 };
 
@@ -152,6 +156,13 @@ export const placesAPI = {
 // Analytics API
 export const analyticsAPI = {
   getTripAnalytics: (tripId) => api.get(`/analytics/trips/${tripId}`),
+};
+
+// AI API
+export const aiAPI = {
+  suggestCategory: (description) => api.get('/ai/suggest-category', { params: { description } }),
+  getSettlementExplain: (tripId) => api.get(`/ai/trips/${tripId}/settlement-explain`),
+  copilotChat: (tripId, data) => api.post(`/ai/trips/${tripId}/copilot`, data),
 };
 
 export default api;

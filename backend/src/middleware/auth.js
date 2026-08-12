@@ -1,7 +1,21 @@
 // src/middleware/auth.js
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+export const getJwtSecret = () => {
+  const configuredSecret = process.env.JWT_SECRET?.trim();
+
+  if (configuredSecret && configuredSecret.length >= 32) {
+    return configuredSecret;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be set to a secure value in production.');
+  }
+
+  return 'development-only-jwt-secret-change-me';
+};
+
+const JWT_SECRET = getJwtSecret();
 
 export const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];

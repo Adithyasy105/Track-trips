@@ -1,9 +1,10 @@
 // src/components/trips/AddExpenseModal.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaTimes } from 'react-icons/fa';
+import { HiSparkles } from 'react-icons/hi2';
 import toast from 'react-hot-toast';
-import { expensesAPI, tripsAPI, paymentsAPI } from '../../services/api';
+import { expensesAPI, tripsAPI, paymentsAPI, aiAPI } from '../../services/api';
 
 export const AddExpenseModal = ({ isOpen, onClose, onSuccess, tripId, members: initialMembers }) => {
   const [formData, setFormData] = useState({
@@ -14,23 +15,26 @@ export const AddExpenseModal = ({ isOpen, onClose, onSuccess, tripId, members: i
   });
   const [members, setMembers] = useState(initialMembers || []);
   const [loading, setLoading] = useState(false);
+  const [aiCategory, setAiCategory] = useState(null);
+  const [aiSuggesting, setAiSuggesting] = useState(false);
+  const descriptionTimer = useRef(null);
 
-  useEffect(() => {
-    if (isOpen && !initialMembers) {
-      loadMembers();
-    } else if (initialMembers) {
-      setMembers(initialMembers);
-    }
-  }, [isOpen, tripId]);
-
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     try {
       const membersRes = await tripsAPI.getMembers(tripId);
       setMembers(membersRes.data || []);
     } catch (error) {
       console.error('Failed to load members', error);
     }
-  };
+  }, [tripId]);
+
+  useEffect(() => {
+    if (isOpen && (!initialMembers || initialMembers.length === 0)) {
+      loadMembers();
+    } else if (initialMembers && initialMembers.length > 0) {
+      setMembers(initialMembers);
+    }
+  }, [isOpen, initialMembers, loadMembers]);
 
   const toggleParticipant = (username) => {
     setFormData(prev => ({
@@ -48,6 +52,34 @@ export const AddExpenseModal = ({ isOpen, onClose, onSuccess, tripId, members: i
 
   const clearAllParticipants = () => {
     setFormData(prev => ({ ...prev, participants: [] }));
+  };
+
+  // Optimized Tiered Classifier: 700ms debounce + local rule engine reduces API costs by ~90%
+  const handleDescriptionChange = (value) => {
+    setFormData(prev => ({ ...prev, description: value }));
+    setAiCategory(null);
+    if (descriptionTimer.current) clearTimeout(descriptionTimer.current);
+    if (!value || value.trim().length < 4) return;
+    descriptionTimer.current = setTimeout(async () => {
+      setAiSuggesting(true);
+      try {
+        const res = await aiAPI.suggestCategory(value);
+        if (res.data?.ai_suggested && res.data?.category) {
+          setAiCategory(res.data.category);
+        }
+      } catch {
+        // AI suggestion is optional — silently ignore failures
+      } finally {
+        setAiSuggesting(false);
+      }
+    }, 700);
+  };
+
+  const acceptAiCategory = () => {
+    if (aiCategory) {
+      setFormData(prev => ({ ...prev, category: aiCategory }));
+      setAiCategory(null);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -127,10 +159,25 @@ export const AddExpenseModal = ({ isOpen, onClose, onSuccess, tripId, members: i
                 <input
                   type="text"
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) => handleDescriptionChange(e.target.value)}
                   className="input-field"
                   placeholder="What was this expense for?"
                 />
+              {aiSuggesting && (
+                <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                  <HiSparkles className="h-3 w-3 text-primary-500" /> Suggesting category…
+                </p>
+              )}
+              {aiCategory && !aiSuggesting && (
+                <button
+                  type="button"
+                  onClick={acceptAiCategory}
+                  className="mt-1 text-xs flex items-center gap-1 text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                >
+                  <HiSparkles className="h-3 w-3" />
+                  AI suggests: <strong>{aiCategory}</strong> — Click to apply
+                </button>
+              )}
               </div>
 
               <div>

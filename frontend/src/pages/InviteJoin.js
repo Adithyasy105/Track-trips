@@ -3,14 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { groupsAPI } from '../services/api';
-import { useAuth } from '../context/AuthContext';
-
 export const InviteJoin = () => {
   const { token } = useParams();
   const navigate = useNavigate();
   const [joining, setJoining] = useState(true);
-
-  const { user } = useAuth();
 
   useEffect(() => {
     const join = async () => {

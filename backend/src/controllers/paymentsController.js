@@ -1,113 +1,27 @@
 // src/controllers/paymentsController.js
 import { supabase } from '../services/supabaseClient.js';
+import { computeSettlements, filterValidExpenses } from '../utils/settlementAlgo.js';
+import { emitToTrip } from '../services/socketService.js';
+import { invalidateTripCaches } from '../services/redisClient.js';
 
-// Helper function to calculate settlements (extracted logic from settlementController)
+// Internal helper: runs the full settlement algorithm for a trip and returns settlements array.
+// Used only by syncPendingPaymentsForTrip (called on mutations, not on GET).
 const calculateSettlements = async (trip_id) => {
-  // Get all expenses for the trip
-  const { data: expenses, error: expError } = await supabase
-    .from('expenses')
-    .select('*')
-    .eq('trip_id', trip_id);
-  if (expError) throw expError;
+  const [membersResult, expensesResult, completedResult] = await Promise.all([
+    supabase.from('trip_members').select('username').eq('trip_id', trip_id),
+    supabase.from('expenses').select('*').eq('trip_id', trip_id),
+    supabase.from('payments').select('from_username, to_username, amount').eq('trip_id', trip_id).eq('status', 'completed'),
+  ]);
 
-  // Get all trip members
-  const { data: members, error: memError } = await supabase
-    .from('trip_members')
-    .select('username')
-    .eq('trip_id', trip_id);
-  if (memError) throw memError;
+  if (membersResult.error) throw membersResult.error;
+  if (expensesResult.error) throw expensesResult.error;
+  if (completedResult.error) throw completedResult.error;
 
-  const memberUsernames = new Set((members || []).map(m => m.username));
-  if (memberUsernames.size === 0) return [];
+  const memberSet = new Set((membersResult.data || []).map((m) => m.username));
+  if (memberSet.size === 0) return [];
 
-  // Filter expenses to only include those where payer and all participants are trip members
-  const validExpenses = expenses.filter(expense => {
-    if (!memberUsernames.has(expense.payer_username)) return false;
-    if (expense.participants && expense.participants.length > 0) {
-      return expense.participants.every(p => memberUsernames.has(p));
-    }
-    return true;
-  });
-
-  // Calculate balances
-  const balances = {};
-  Array.from(memberUsernames).forEach(username => {
-    balances[username] = { paid: 0, owes: 0, net: 0 };
-  });
-
-  validExpenses.forEach(expense => {
-    const { payer_username, amount, participants } = expense;
-    if (!participants || participants.length === 0) return;
-    
-    const sharePerPerson = amount / participants.length;
-    if (balances[payer_username]) {
-      balances[payer_username].paid += amount;
-    }
-    participants.forEach(participant => {
-      if (balances[participant]) {
-        balances[participant].owes += sharePerPerson;
-      }
-    });
-  });
-
-  Object.keys(balances).forEach(username => {
-    balances[username].net = balances[username].paid - balances[username].owes;
-  });
-
-  // Subtract completed payments
-  const { data: completedPayments } = await supabase
-    .from('payments')
-    .select('from_username, to_username, amount, status')
-    .eq('trip_id', trip_id)
-    .eq('status', 'completed');
-  (completedPayments || []).forEach(p => {
-    const debtor = p.from_username;
-    const creditor = p.to_username;
-    const amt = parseFloat(p.amount) || 0;
-    if (balances[debtor]) balances[debtor].net += amt;
-    if (balances[creditor]) balances[creditor].net -= amt;
-  });
-
-  // Calculate settlements
-  const settlements = [];
-  const creditors = [];
-  const debtors = [];
-
-  Object.keys(balances).forEach(username => {
-    const net = balances[username].net;
-    if (net > 0.01) {
-      creditors.push({ username, amount: net });
-    } else if (net < -0.01) {
-      debtors.push({ username, amount: Math.abs(net) });
-    }
-  });
-
-  creditors.sort((a, b) => b.amount - a.amount);
-  debtors.sort((a, b) => b.amount - a.amount);
-
-  let creditorIndex = 0;
-  let debtorIndex = 0;
-
-  while (creditorIndex < creditors.length && debtorIndex < debtors.length) {
-    const creditor = creditors[creditorIndex];
-    const debtor = debtors[debtorIndex];
-    const settleAmount = Math.min(creditor.amount, debtor.amount);
-
-    if (settleAmount > 0.01) {
-      settlements.push({
-        from: debtor.username,
-        to: creditor.username,
-        amount: parseFloat(settleAmount.toFixed(2))
-      });
-    }
-
-    creditor.amount -= settleAmount;
-    debtor.amount -= settleAmount;
-
-    if (creditor.amount < 0.01) creditorIndex++;
-    if (debtor.amount < 0.01) debtorIndex++;
-  }
-
+  const validExpenses = filterValidExpenses(expensesResult.data, memberSet);
+  const { settlements } = computeSettlements(validExpenses, memberSet, completedResult.data || []);
   return settlements;
 };
 
@@ -172,8 +86,9 @@ export const listTripPayments = async (req, res, next) => {
       .maybeSingle();
     if (!membership) return res.status(403).json({ error: 'Forbidden' });
 
-    await syncPendingPaymentsForTrip(trip_id, username);
-
+    // NOTE: sync is intentionally NOT called here (BUG 3 fix).
+    // Pending payments are only recalculated on mutations (add/delete expense, complete payment).
+    // GET simply reads existing rows — no delete-and-recreate on every request.
     const { data: allPayments, error: finalError } = await supabase
       .from('payments')
       .select('*')
@@ -262,6 +177,8 @@ export const completePayment = async (req, res, next) => {
 
     try {
       await syncPendingPaymentsForTrip(payment.trip_id, username);
+      await invalidateTripCaches(payment.trip_id);
+      emitToTrip(payment.trip_id, 'settlement:updated', data[0]);
     } catch (syncErr) {
       console.error('Failed to sync payments after completion:', syncErr);
     }

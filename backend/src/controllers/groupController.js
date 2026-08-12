@@ -510,7 +510,7 @@ export const generateInvite = async (req, res, next) => {
     }
 
     const payload = { group_id };
-    const token = jwt.sign(payload, process.env.JWT_SECRET || 'your-secret-key-change-in-production', {
+    const token = jwt.sign(payload, getJwtSecret(), {
       expiresIn: '7d',
       subject: 'group_invite'
     });
@@ -531,7 +531,7 @@ export const joinByInvite = async (req, res, next) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+      decoded = jwt.verify(token, getJwtSecret());
       if (decoded.sub !== 'group_invite') {
         return res.status(400).json({ error: 'Invalid invite token' });
       }

@@ -14,6 +14,7 @@ import { GroupDetail } from './pages/GroupDetail';
 import { InviteJoin } from './pages/InviteJoin';
 import { useAuth } from './context/AuthContext';
 import { ResetPassword } from './pages/ResetPassword';
+import { FloatingAICopilotButton } from './components/FloatingAICopilotButton';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -86,6 +87,7 @@ function App() {
       <AuthProvider>
         <Router>
           <AppRoutes />
+          <FloatingAICopilotButton />
           <Toaster
             position="top-right"
             toastOptions={{

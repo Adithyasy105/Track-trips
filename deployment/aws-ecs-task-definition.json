@@ -1,0 +1,51 @@
+{
+  "family": "tripsync-backend-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::123456789012:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::123456789012:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "tripsync-backend",
+      "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/tripsync-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 5000,
+          "hostPort": 5000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "PORT", "value": "5000" },
+        { "name": "ALLOWED_ORIGINS", "value": "https://track-trips.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:3001" }
+      ],
+      "secrets": [
+        { "name": "SUPABASE_URL", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:tripsync/prod:SUPABASE_URL::" },
+        { "name": "SUPABASE_SERVICE_ROLE_KEY", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:tripsync/prod:SUPABASE_KEY::" },
+        { "name": "JWT_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:tripsync/prod:JWT_SECRET::" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:tripsync/prod:REDIS_URL::" },
+        { "name": "GEMINI_API_KEY", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:tripsync/prod:GEMINI_API_KEY::" },
+        { "name": "OTP_HMAC_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:tripsync/prod:OTP_HMAC_SECRET::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/tripsync-backend",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 10
+      }
+    }
+  ]
+}

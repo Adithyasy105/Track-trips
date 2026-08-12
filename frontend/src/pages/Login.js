@@ -4,17 +4,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { FaUsers, FaEye, FaEyeSlash } from 'react-icons/fa';
-import { authAPI } from '../services/api';
+import { FaUsers, FaEye, FaEyeSlash, FaExclamationCircle, FaArrowLeft } from 'react-icons/fa';
 
 export const Login = () => {
   const [formData, setFormData] = useState({ username: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showInvalid, setShowInvalid] = useState(false);
-  const [forgotOpen, setForgotOpen] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotLoading, setForgotLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -25,61 +20,52 @@ export const Login = () => {
 
     try {
       await login(formData);
-      toast.success('Login successful!');
+      toast.success('Welcome back!');
       setErrorMessage('');
       navigate('/dashboard');
     } catch (error) {
-      const message = error.response?.data?.error || 'Invalid credentials';
+      const message = error.response?.data?.error || 'Invalid username or password.';
       toast.error(message);
-      setShowInvalid(true);
       setErrorMessage(message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleForgotSubmit = async () => {
-    if (!forgotEmail) {
-      toast.error('Please enter your email first.');
-      return;
-    }
-    setForgotLoading(true);
-    try {
-      await authAPI.forgotPassword({ email: forgotEmail.trim() });
-      toast.success('If the email exists, a reset link has been sent.');
-      setForgotOpen(false);
-      setForgotEmail('');
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to send reset email');
-    } finally {
-      setForgotLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-12">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="card max-w-md w-full"
+        transition={{ duration: 0.3 }}
+        className="card max-w-md w-full shadow-xl border border-gray-200/80 dark:border-gray-700/80 relative"
       >
+        {/* Back to Home Button */}
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white mb-4 transition-colors"
+        >
+          <FaArrowLeft className="h-3 w-3" /> Back to Home
+        </Link>
+
         <div className="text-center mb-6">
-          <FaUsers className="h-12 w-12 text-primary-600 mx-auto mb-4" />
+          <div className="w-12 h-12 rounded-2xl bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300 flex items-center justify-center mx-auto mb-3 shadow-sm">
+            <FaUsers className="h-6 w-6" />
+          </div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Welcome Back</h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Sign in to your account</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Sign in to manage your trip expenses</p>
         </div>
 
         {errorMessage && (
-          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200">
-            {errorMessage}
+          <div className="mb-4 alert alert-error text-xs flex items-center gap-2">
+            <FaExclamationCircle className="h-4 w-4 flex-shrink-0" />
+            <span>{errorMessage}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Username
-            </label>
+            <label className="form-label">Username</label>
             <input
               type="text"
               required
@@ -91,9 +77,12 @@ export const Login = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Password</label>
+              <Link to="/reset-password" className="text-xs text-primary-600 hover:text-primary-700 font-semibold">
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -106,7 +95,7 @@ export const Login = () => {
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer"
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <FaEyeSlash /> : <FaEye />}
@@ -117,57 +106,23 @@ export const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="btn-primary w-full"
+            className="btn-primary w-full py-3 mt-2 cursor-pointer"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-            Sign up
-          </Link>
-        </p>
-
-        <div className="mt-2 text-center">
-          <button onClick={() => setForgotOpen(true)} className="text-xs text-primary-600 hover:text-primary-700 font-medium">Forgot password?</button>
+        <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700/60 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-primary-600 hover:text-primary-700 dark:text-primary-400 font-semibold">
+              Sign up free
+            </Link>
+          </p>
         </div>
       </motion.div>
-
-      {showInvalid && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Invalid credentials</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">The username or password you entered is incorrect.</p>
-            <div className="mt-4 flex gap-2">
-              <button className="btn-secondary flex-1" onClick={() => setShowInvalid(false)}>Close</button>
-              <button className="btn-primary flex-1" onClick={() => { setShowInvalid(false); setForgotOpen(true); }}>Reset Password</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {forgotOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Reset Password</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">Enter your email to receive reset instructions.</p>
-            <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} className="input-field mt-3" placeholder="you@example.com" />
-            <div className="mt-4 flex gap-2">
-              <button className="btn-secondary flex-1" onClick={() => setForgotOpen(false)}>Cancel</button>
-              <button
-                type="button"
-                className="btn-primary flex-1"
-                disabled={forgotLoading}
-                onClick={handleForgotSubmit}
-              >
-                {forgotLoading ? 'Sending...' : 'Send Reset Link'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+
+export default Login;

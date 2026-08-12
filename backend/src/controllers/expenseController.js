@@ -1,6 +1,8 @@
 // src/controllers/expenseController.js
 import { supabase } from '../services/supabaseClient.js';
 import { syncPendingPaymentsForTrip } from './paymentsController.js';
+import { invalidateTripCaches } from '../services/redisClient.js';
+import { emitToTrip } from '../services/socketService.js';
 
 export const addExpense = async (req, res, next) => {
   try {
@@ -46,21 +48,39 @@ export const addExpense = async (req, res, next) => {
       });
     }
 
-    // Insert expense
-    const { data: expense, error } = await supabase
-      .from('expenses')
-      .insert([{ trip_id, payer_username, amount, description, category, participants }])
-      .select();
+    // Try Atomic RPC Outbox insertion first; fallback to standard insert if RPC isn't deployed yet
+    let newExpenseRecord = null;
+    const { data: rpcData, error: rpcError } = await supabase.rpc('insert_expense_with_outbox', {
+      p_trip_id: trip_id,
+      p_payer_username: payer_username,
+      p_amount: amount,
+      p_description: description,
+      p_category: category,
+      p_participants: participants,
+    });
 
-    if (error) throw error;
+    if (!rpcError && rpcData) {
+      newExpenseRecord = rpcData;
+    } else {
+      // Standard insert fallback
+      const { data: expense, error } = await supabase
+        .from('expenses')
+        .insert([{ trip_id, payer_username, amount, description, category, participants }])
+        .select();
+
+      if (error) throw error;
+      newExpenseRecord = expense[0];
+    }
 
     try {
       await syncPendingPaymentsForTrip(trip_id, payer_username);
+      await invalidateTripCaches(trip_id);
+      emitToTrip(trip_id, 'expense:added', newExpenseRecord);
     } catch (syncErr) {
-      console.error('Failed to sync payments after adding expense:', syncErr);
+      console.error('Failed to sync payments / invalidate cache / emit event after adding expense:', syncErr);
     }
 
-    res.status(201).json({ message: 'Expense added', expense: expense[0] });
+    res.status(201).json({ message: 'Expense added', expense: newExpenseRecord });
   } catch (err) {
     next(err);
   }
@@ -195,8 +215,10 @@ export const deleteExpense = async (req, res, next) => {
 
     try {
       await syncPendingPaymentsForTrip(expense.trip_id, username);
+      await invalidateTripCaches(expense.trip_id);
+      emitToTrip(expense.trip_id, 'expense:deleted', { id: expense_id, deleted_by: username });
     } catch (syncErr) {
-      console.error('Failed to sync payments after expense delete:', syncErr);
+      console.error('Failed to sync payments / invalidate cache / emit event after expense delete:', syncErr);
     }
 
     res.json({ message: 'Expense deleted successfully' });

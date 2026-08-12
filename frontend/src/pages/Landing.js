@@ -1,188 +1,222 @@
 // src/pages/Landing.js
-import React from "react";
-import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
   FaUsers,
   FaMoneyBillWave,
   FaChartLine,
-  FaMapMarkerAlt,
+  FaBolt,
   FaShieldAlt,
-  FaMobileAlt,
   FaArrowRight,
   FaCheckCircle,
-} from "react-icons/fa";
+} from 'react-icons/fa';
+import { HiSparkles } from 'react-icons/hi2';
 
 export const Landing = () => {
   const features = [
     {
-      icon: <FaUsers className="text-3xl text-primary-600" />,
-      title: "Smart Group Management",
+      icon: <HiSparkles className="text-2xl text-primary-500" />,
+      title: 'AI Financial Copilot',
       description:
-        "Create groups, invite friends, and manage multiple trips or events easily.",
+        'Ask questions in plain language like "Where did we spend most?" and get instant contextual insights powered by Gemini AI.',
+      tag: 'Gemini AI',
     },
     {
-      icon: <FaMoneyBillWave className="text-3xl text-primary-600" />,
-      title: "Automatic Expense Splitting",
+      icon: <FaBolt className="text-2xl text-amber-500" />,
+      title: 'Real-Time Synchronization',
       description:
-        "No calculators needed — we split bills, track who owes who, and keep balances updated in real-time.",
+        'Socket.io WebSockets push balance updates, new expenses, and settlement changes to all trip members live.',
+      tag: 'WebSockets',
     },
     {
-      icon: <FaChartLine className="text-3xl text-primary-600" />,
-      title: "Visual Insights & Analytics",
+      icon: <FaMoneyBillWave className="text-2xl text-emerald-500" />,
+      title: 'Integer Paise Math Engine',
       description:
-        "Understand spending patterns with beautiful, interactive charts and summaries.",
+        'Zero rounding errors. Uses integer paise precision with greedy debt-minimization algorithms for accurate splits.',
+      tag: 'Precision Engine',
     },
     {
-      icon: <FaMapMarkerAlt className="text-3xl text-primary-600" />,
-      title: "Travel Memories & Places",
+      icon: <FaUsers className="text-2xl text-sky-500" />,
+      title: 'Smart Groups & Trip Hubs',
       description:
-        "Document your journey with photos, visited places, and shared trip notes.",
+        'Create groups, invite friends via secure links, manage multiple trip itineraries, and split bills effortlessly.',
+      tag: 'Group Hub',
     },
     {
-      icon: <FaShieldAlt className="text-3xl text-primary-600" />,
-      title: "Private & Secure",
+      icon: <FaChartLine className="text-2xl text-indigo-500" />,
+      title: 'Visual Spending Analytics',
       description:
-        "Your data stays yours — encrypted, safe, and password-protected where needed.",
+        'Interactive breakdown by category, member balances, and high-performance Redis cached reports.',
+      tag: 'Analytics',
     },
     {
-      icon: <FaMobileAlt className="text-3xl text-primary-600" />,
-      title: "Optimized for All Devices",
+      icon: <FaShieldAlt className="text-2xl text-teal-500" />,
+      title: 'Transactional Outbox & Security',
       description:
-        "Built mobile-first for smooth experience across phones, tablets, and desktops.",
+        'Built with Transactional Outbox patterns, optional Kafka event streams, and JWT parameterization.',
+      tag: 'High Reliability',
     },
   ];
 
   const benefits = [
-    "No awkward money conversations again",
-    "Instant group balance updates",
-    "Auto settlement calculations",
-    "Beautiful, intuitive interface",
-    "Free forever — no hidden costs",
+    'Zero financial rounding drift (Paise Math)',
+    'Instant real-time Socket.io sync',
+    'Gemini AI smart expense categories',
+    'Interactive AI Financial Copilot chat',
+    '100% free & open for group travel',
   ];
 
   const fadeInUp = {
-    hidden: { opacity: 0, y: 30 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+    hidden: { opacity: 0, y: 24 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
   };
 
   return (
-    <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 min-h-screen flex flex-col">
-      {/* Navbar */}
-      <header className="fixed top-0 left-0 w-full z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <FaUsers className="text-primary-600 text-2xl" />
-            <span className="text-xl font-bold text-gray-900 dark:text-white">
+    <div className="bg-slate-900 text-white min-h-screen flex flex-col selection:bg-primary-500 selection:text-white">
+      {/* Top Banner */}
+      <div className="bg-primary-600 text-white text-xs py-2 px-4 text-center font-medium flex items-center justify-center gap-2">
+        <HiSparkles className="h-4 w-4" />
+        <span>New: AI Financial Copilot &amp; Real-time WebSocket synchronization live!</span>
+      </div>
+
+      {/* Header Nav */}
+      <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-xl border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary-600 flex items-center justify-center shadow-lg shadow-primary-600/30">
+              <FaUsers className="text-white text-lg" />
+            </div>
+            <span className="text-2xl font-bold tracking-tight text-white">
               TripSync
             </span>
           </div>
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-4">
             <Link
               to="/login"
-              className="text-gray-700 dark:text-gray-300 hover:text-primary-600 font-medium"
+              className="text-slate-300 hover:text-white text-sm font-semibold transition"
             >
               Sign In
             </Link>
             <Link
               to="/register"
-              className="bg-primary-600 hover:bg-primary-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-md transition"
+              className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md shadow-primary-600/20 transition transform hover:-translate-y-0.5"
             >
-              Get Started
+              Get Started Free
             </Link>
           </div>
         </div>
       </header>
 
       {/* Hero Section */}
-      <main className="flex-grow pt-28 sm:pt-32 pb-20 text-center px-6">
+      <main className="flex-grow pt-16 pb-16 text-center px-6 relative overflow-hidden">
+        {/* Background glow */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary-600/15 rounded-full blur-3xl pointer-events-none" />
+
         <motion.div
           initial="hidden"
           animate="visible"
           variants={{
-            visible: {
-              transition: { staggerChildren: 0.2 },
-            },
+            visible: { transition: { staggerChildren: 0.12 } },
           }}
-          className="max-w-4xl mx-auto"
+          className="max-w-4xl mx-auto relative z-10"
         >
+          <motion.div variants={fadeInUp} className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-primary-500/10 border border-primary-500/20 text-primary-300 text-xs font-semibold mb-6">
+            <HiSparkles className="text-primary-400" />
+            Powered by Gemini AI &amp; Socket.io WebSockets
+          </motion.div>
+
           <motion.h1
             variants={fadeInUp}
-            className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-gray-900 dark:text-white leading-tight mb-6"
+            className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-tight mb-6"
           >
-            Split <span className="text-primary-600">Smarter</span>, Travel{" "}
-            <span className="text-indigo-500">Together</span>
+            Split Trip Expenses. <br />
+            <span className="bg-gradient-to-r from-primary-400 via-sky-300 to-emerald-400 bg-clip-text text-transparent">
+              Zero Rounding Drift.
+            </span>
           </motion.h1>
 
           <motion.p
             variants={fadeInUp}
-            className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto mb-8"
+            className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto mb-8 leading-relaxed"
           >
-            The easiest way to split group expenses, manage shared trips, and
-            track your spending — all in one place.
+            Manage group travel, track shared expenses in real time with integer paise math, and ask our AI Financial Copilot anything about your trip.
           </motion.p>
 
           <motion.div
             variants={fadeInUp}
-            className="flex flex-col sm:flex-row justify-center gap-4"
+            className="flex flex-col sm:flex-row justify-center gap-3 max-w-md mx-auto"
           >
             <Link
               to="/register"
-              className="bg-primary-600 hover:bg-primary-700 text-white px-8 py-4 rounded-lg font-semibold shadow-lg transition flex items-center justify-center gap-2"
+              className="bg-primary-600 hover:bg-primary-700 text-white px-7 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-primary-600/30 transition flex items-center justify-center gap-2 transform hover:-translate-y-0.5"
             >
-              Get Started Free <FaArrowRight />
+              Get Started Free <FaArrowRight className="h-3.5 w-3.5" />
             </Link>
             <Link
               to="/login"
-              className="border border-primary-600 text-primary-600 hover:bg-primary-50 dark:hover:bg-gray-800 px-8 py-4 rounded-lg font-semibold transition"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-7 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-center"
             >
               Sign In
             </Link>
           </motion.div>
 
+          {/* Benefits List */}
           <motion.div
             variants={fadeInUp}
-            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-12"
+            className="flex flex-wrap justify-center gap-2.5 mt-10 text-slate-300 text-xs font-medium"
           >
             {benefits.map((b, i) => (
-              <motion.div
+              <span
                 key={i}
-                className="flex items-center justify-center text-gray-700 dark:text-gray-300 text-sm"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-800/60 border border-slate-700/60"
               >
-                <FaCheckCircle className="text-primary-500 mr-2" /> {b}
-              </motion.div>
+                <FaCheckCircle className="text-emerald-400" /> {b}
+              </span>
             ))}
           </motion.div>
         </motion.div>
       </main>
 
-      {/* Feature Section */}
-      <section className="py-20 bg-white dark:bg-gray-900">
+      {/* Feature Grid */}
+      <section className="py-16 bg-slate-950 border-t border-slate-800/80">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-3">
-              Powerful Features for Every Group
+          <div className="text-center mb-12">
+            <span className="text-xs font-bold uppercase tracking-wider text-primary-400 mb-2 block">
+              Architected for Travel Groups
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-extrabold text-white mb-3">
+              Everything You Need for Group Finances
             </h2>
-            <p className="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-              Everything you need to manage group trips, events, and shared
-              finances — beautifully designed and easy to use.
+            <p className="text-slate-400 max-w-xl mx-auto text-sm">
+              Built with integer paise accuracy, real-time push events, and Gemini AI insights.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {features.map((f, i) => (
               <motion.div
                 key={i}
-                whileHover={{ y: -5 }}
-                className="p-6 rounded-xl shadow-sm hover:shadow-xl transition bg-gray-50 dark:bg-gray-800"
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.2 }}
+                className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-primary-500/40 transition flex flex-col justify-between"
               >
-                <div className="mb-4">{f.icon}</div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                  {f.title}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300">
-                  {f.description}
-                </p>
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center">
+                      {f.icon}
+                    </div>
+                    <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-primary-500/10 border border-primary-500/20 text-primary-300">
+                      {f.tag}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-1.5">
+                    {f.title}
+                  </h3>
+                  <p className="text-slate-400 text-xs leading-relaxed">
+                    {f.description}
+                  </p>
+                </div>
               </motion.div>
             ))}
           </div>
@@ -190,41 +224,38 @@ export const Landing = () => {
       </section>
 
       {/* CTA */}
-      <section className="py-24 bg-gradient-to-r from-primary-600 to-indigo-600 text-white text-center">
+      <section className="py-16 bg-slate-900 border-t border-slate-800 text-center">
         <div className="max-w-3xl mx-auto px-6">
-          <h2 className="text-4xl font-bold mb-4">
-            Ready to simplify your expenses?
+          <h2 className="text-2xl sm:text-4xl font-extrabold mb-3">
+            Ready to split trip expenses cleanly?
           </h2>
-          <p className="text-lg mb-8 text-primary-100">
-            Join thousands of users who travel, spend, and split smartly every
-            day.
+          <p className="text-sm text-slate-300 mb-6 max-w-md mx-auto">
+            Create an account in seconds and experience real-time group balances and AI financial insights.
           </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link
-              to="/register"
-              className="bg-white text-primary-700 hover:bg-gray-100 px-8 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
-            >
-              Create Free Account <FaArrowRight />
-            </Link>
-            <Link
-              to="/login"
-              className="border border-white hover:bg-white hover:text-primary-700 px-8 py-3 rounded-lg font-semibold transition"
-            >
-              Sign In
-            </Link>
-          </div>
+          <Link
+            to="/register"
+            className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-7 py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary-600/30 transition transform hover:-translate-y-0.5"
+          >
+            Get Started Free <FaArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-950 text-gray-400 py-10 text-center">
-        <div className="max-w-7xl mx-auto px-6">
-          <p className="text-sm">
-            © {new Date().getFullYear()} TripSync. Built with ❤️ for smarter
-            group travel and shared spending.
-          </p>
+      <footer className="bg-slate-950 text-slate-500 py-6 text-center text-xs border-t border-slate-900">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-3">
+          <p>© {new Date().getFullYear()} TripSync. Built for smart group travel and shared spending.</p>
+          <div className="flex gap-3 text-slate-400 text-[11px]">
+            <span>Paise Math</span>
+            <span>·</span>
+            <span>Gemini AI</span>
+            <span>·</span>
+            <span>Socket.io</span>
+          </div>
         </div>
       </footer>
     </div>
   );
 };
+
+export default Landing;
