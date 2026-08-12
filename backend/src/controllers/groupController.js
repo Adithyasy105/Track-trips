@@ -1,6 +1,7 @@
 // src/controllers/groupController.js
 import { supabase } from '../services/supabaseClient.js';
 import { hashPassword, comparePassword } from '../utils/hash.js';
+import { getJwtSecret } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
 
 export const createGroup = async (req, res, next) => {

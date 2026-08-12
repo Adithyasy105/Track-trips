@@ -2,7 +2,7 @@
 import jwt from 'jsonwebtoken';
 
 export const getJwtSecret = () => {
-  const configuredSecret = process.env.JWT_SECRET?.trim();
+  const configuredSecret = process.env.JWT_SECRET?.trim() || process.env.JWT_secret?.trim();
 
   if (configuredSecret && configuredSecret.length >= 32) {
     return configuredSecret;
