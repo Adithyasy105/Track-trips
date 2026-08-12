@@ -14,7 +14,6 @@ import {
 import {
   FaTimes,
   FaCamera,
-  FaUpload,
   FaImage,
   FaSyncAlt
 } from 'react-icons/fa';
