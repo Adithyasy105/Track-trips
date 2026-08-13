@@ -1381,22 +1381,19 @@ export const ExpensesTab = ({ tripId }) => {
                         {isExpanded && (
                           <motion.div
                             initial={{
+                              height: 0,
                               opacity: 0,
-                              y: -8,
-                              scale: 0.985,
                             }}
                             animate={{
+                              height: 'auto',
                               opacity: 1,
-                              y: 0,
-                              scale: 1,
                             }}
                             exit={{
+                              height: 0,
                               opacity: 0,
-                              y: -6,
-                              scale: 0.985,
                             }}
                             transition={{
-                              duration: 0.22,
+                              duration: 0.28,
                               ease: [0.22, 1, 0.36, 1],
                             }}
                             className="overflow-hidden"
