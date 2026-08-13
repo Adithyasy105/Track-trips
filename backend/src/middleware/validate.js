@@ -78,7 +78,10 @@ export const schemas = {
       amount: z.coerce.number().positive(),
       description: z.string().optional(),
       category: z.string().optional().nullable(),
-      participants: z.array(z.string()).min(1)
+      payer_username: z.string().optional(),
+      participants: z.array(z.string()).min(1),
+      split_type: z.enum(['EQUAL', 'EXACT', 'PERCENTAGE', 'SHARES', 'ADJUSTMENT', 'ITEMIZED']).optional(),
+      split_data: z.record(z.any()).optional().default({}),
     })
   }),
 

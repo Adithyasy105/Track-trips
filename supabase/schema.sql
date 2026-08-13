@@ -138,8 +138,16 @@ CREATE TABLE expenses (
   description TEXT,
   category VARCHAR(50),
   participants TEXT[] NOT NULL, -- Array of usernames
+  split_type VARCHAR(20) NOT NULL DEFAULT 'EQUAL',
+  split_data JSONB NOT NULL DEFAULT '{}'::jsonb,
   timestamp TIMESTAMP DEFAULT NOW()
 );
+
+ALTER TABLE expenses
+  ADD COLUMN IF NOT EXISTS split_type VARCHAR(20) NOT NULL DEFAULT 'EQUAL';
+
+ALTER TABLE expenses
+  ADD COLUMN IF NOT EXISTS split_data JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- Places visited table (depends on trips)
 CREATE TABLE IF NOT EXISTS places_visited (

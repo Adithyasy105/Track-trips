@@ -1,139 +1,110 @@
 // src/utils/settlementAlgo.js
-// Single source of truth for the Greedy Debt Simplification Algorithm.
-// Uses integer paise (1 rupee = 100 paise) for all arithmetic to eliminate
-// floating-point accumulation errors. Converts to rupees only at output.
-//
-// Interview talking point:
-//   "₹100 / 6 people = ₹16.666... — rounding each share independently
-//    gives ₹16.67 × 6 = ₹100.02, creating ₹0.02 from nothing. Instead,
-//    we distribute the remainder (4 paise) to the first 4 participants
-//    deterministically. Total is always guaranteed to equal the expense amount."
+import { resolveExpenseAllocations, normalizeParticipants } from './splitEngine.js';
 
-/**
- * Filter expenses to only include those where payer AND all participants
- * are current trip members. Prevents removed members from affecting balances.
- *
- * @param {Array} expenses - Raw expense rows from DB
- * @param {Set<string>} memberSet - Set of valid trip member usernames
- * @returns {Array} validExpenses
- */
 export function filterValidExpenses(expenses, memberSet) {
-  return (expenses || []).filter(expense => {
-    if (!memberSet.has(expense.payer_username)) return false;
-    if (expense.participants && expense.participants.length > 0) {
-      return expense.participants.every(p => memberSet.has(p));
-    }
-    return true;
+  return (expenses || []).filter((expense) => {
+    if (!expense || !expense.payer_username || !memberSet.has(expense.payer_username)) return false;
+
+    const participants = normalizeParticipants(expense.participants || []);
+    const explicitParticipants = Array.isArray(expense.participant_allocations)
+      ? expense.participant_allocations.map((entry) => entry.username)
+      : [];
+    const allParticipants = normalizeParticipants([...participants, ...explicitParticipants]);
+
+    if (!allParticipants.length) return false;
+    return allParticipants.every((username) => memberSet.has(username));
   });
 }
 
-/**
- * Greedy Debt Simplification Algorithm.
- * Minimizes the number of transactions needed to settle all debts for a trip.
- *
- * @param {Array}       validExpenses      - Expenses pre-filtered to trip members only
- * @param {Set<string>} memberSet          - Set of valid trip member usernames
- * @param {Array}       completedPayments  - Payments with status='completed'
- * @returns {{
- *   balances:    { [username]: { paid: number, owes: number, net: number } },
- *   settlements: Array<{ from: string, to: string, amount: number }>
- * }}
- */
 export function computeSettlements(validExpenses, memberSet, completedPayments = []) {
-  // ── Step 1: Initialize integer-paise accumulators for all trip members ──
   const paidPaise = {};
   const owesPaise = {};
-  for (const u of memberSet) {
-    paidPaise[u] = 0;
-    owesPaise[u] = 0;
+
+  for (const username of memberSet) {
+    paidPaise[username] = 0;
+    owesPaise[username] = 0;
   }
 
-  // ── Step 2: Process each expense with integer paise arithmetic ──
   for (const expense of validExpenses) {
-    const { payer_username, amount, participants } = expense;
-    if (!participants || participants.length === 0) continue;
+    const payer = expense.payer_username;
+    if (!payer || paidPaise[payer] === undefined) continue;
 
-    const totalPaise = Math.round(parseFloat(amount) * 100);
-    const n = participants.length;
-    const basePaise = Math.floor(totalPaise / n);
-    const remainder = totalPaise % n;
-    // Proof: basePaise*n + remainder = totalPaise always ✓
+    const totalPaise = Math.round(Number(expense.amount || 0) * 100);
+    paidPaise[payer] += totalPaise;
 
-    // Credit the payer in full
-    if (paidPaise[payer_username] !== undefined) {
-      paidPaise[payer_username] += totalPaise;
-    }
+    const allocations = resolveExpenseAllocations({
+      ...expense,
+      participants: expense.participants || [],
+      split_type: expense.split_type || 'EQUAL',
+      split_data: expense.split_data || {},
+    }, memberSet);
 
-    // Debit each participant their share (first `remainder` get 1 extra paisa)
-    participants.forEach((participant, i) => {
-      if (owesPaise[participant] !== undefined) {
-        owesPaise[participant] += basePaise + (i < remainder ? 1 : 0);
+    for (const allocation of allocations) {
+      const target = allocation.username;
+      if (owesPaise[target] === undefined) {
+        owesPaise[target] = 0;
       }
-    });
+      owesPaise[target] += Number(allocation.amountPaise || 0);
+    }
   }
 
-  // ── Step 3: Compute net balance in paise ──
   const netPaise = {};
-  for (const u of memberSet) {
-    netPaise[u] = paidPaise[u] - owesPaise[u];
+  for (const username of memberSet) {
+    netPaise[username] = paidPaise[username] - owesPaise[username];
   }
 
-  // ── Step 4: Factor in completed payments ──
-  for (const p of completedPayments) {
-    const paise = Math.round(parseFloat(p.amount) * 100);
-    if (netPaise[p.from_username] !== undefined) netPaise[p.from_username] += paise;
-    if (netPaise[p.to_username]   !== undefined) netPaise[p.to_username]   -= paise;
+  for (const payment of completedPayments || []) {
+    const from = payment.from_username;
+    const to = payment.to_username;
+    const amountPaise = Math.round(Number(payment.amount || 0) * 100);
+    if (from && netPaise[from] !== undefined) netPaise[from] += amountPaise;
+    if (to && netPaise[to] !== undefined) netPaise[to] -= amountPaise;
   }
 
-  // ── Step 5: Build rupee balances for API response ──
   const balances = {};
-  for (const u of memberSet) {
-    balances[u] = {
-      paid: parseFloat((paidPaise[u]  / 100).toFixed(2)),
-      owes: parseFloat((owesPaise[u]  / 100).toFixed(2)),
-      net:  parseFloat((netPaise[u]   / 100).toFixed(2)),
+  for (const username of memberSet) {
+    balances[username] = {
+      paid: Number((paidPaise[username] / 100).toFixed(2)),
+      owes: Number((owesPaise[username] / 100).toFixed(2)),
+      net: Number((netPaise[username] / 100).toFixed(2)),
     };
   }
 
-  // ── Step 6: Partition into creditors and debtors ──
-  // 1 paisa threshold — anything smaller is floating-point noise, not a real debt
-  const THRESHOLD = 1; // paise
-
+  const THRESHOLD = 1;
   const creditors = [];
-  const debtors   = [];
+  const debtors = [];
 
-  for (const u of memberSet) {
-    const net = netPaise[u];
-    if (net >  THRESHOLD) creditors.push({ username: u, amountPaise: net });
-    if (net < -THRESHOLD) debtors.push({   username: u, amountPaise: Math.abs(net) });
+  for (const username of memberSet) {
+    const net = netPaise[username];
+    if (net > THRESHOLD) creditors.push({ username, amountPaise: net });
+    if (net < -THRESHOLD) debtors.push({ username, amountPaise: Math.abs(net) });
   }
 
-  // ── Step 7: Sort largest-first (greedy optimal) ──
   creditors.sort((a, b) => b.amountPaise - a.amountPaise);
-  debtors.sort(  (a, b) => b.amountPaise - a.amountPaise);
+  debtors.sort((a, b) => b.amountPaise - a.amountPaise);
 
-  // ── Step 8: Two-pointer greedy matching ──
   const settlements = [];
-  let ci = 0, di = 0;
+  let creditorIndex = 0;
+  let debtorIndex = 0;
 
-  while (ci < creditors.length && di < debtors.length) {
-    const creditor = creditors[ci];
-    const debtor   = debtors[di];
+  while (creditorIndex < creditors.length && debtorIndex < debtors.length) {
+    const creditor = creditors[creditorIndex];
+    const debtor = debtors[debtorIndex];
     const settlePaise = Math.min(creditor.amountPaise, debtor.amountPaise);
 
     if (settlePaise >= THRESHOLD) {
       settlements.push({
-        from:   debtor.username,
-        to:     creditor.username,
-        amount: parseFloat((settlePaise / 100).toFixed(2)),
+        from: debtor.username,
+        to: creditor.username,
+        amount: Number((settlePaise / 100).toFixed(2)),
       });
     }
 
     creditor.amountPaise -= settlePaise;
-    debtor.amountPaise   -= settlePaise;
+    debtor.amountPaise -= settlePaise;
 
-    if (creditor.amountPaise < THRESHOLD) ci++;
-    if (debtor.amountPaise   < THRESHOLD) di++;
+    if (creditor.amountPaise < THRESHOLD) creditorIndex += 1;
+    if (debtor.amountPaise < THRESHOLD) debtorIndex += 1;
   }
 
   return { balances, settlements };

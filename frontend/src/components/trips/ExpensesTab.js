@@ -19,9 +19,14 @@ import {
   FaTrash,
   FaRupeeSign,
   FaUsers,
-  FaCalendarAlt,
   FaChevronDown,
   FaReceipt,
+  FaEquals,
+  FaCoins,
+  FaPercent,
+  FaPiggyBank,
+  FaSlidersH,
+  FaListUl,
 } from 'react-icons/fa';
 
 import {
@@ -115,30 +120,43 @@ const Avatar = ({
 };
 
 
-/* ============================================================
-   DATE FORMATTER
-============================================================ */
+const getSplitBadgeMeta = (splitType) => {
+  const key = splitType || 'EQUAL';
 
-const formatExpenseDate = (timestamp) => {
-  if (!timestamp) {
-    return 'Date unavailable';
-  }
+  const map = {
+    EQUAL: {
+      label: 'Equal',
+      icon: FaEquals,
+      className: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300',
+    },
+    EXACT: {
+      label: 'Exact',
+      icon: FaCoins,
+      className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+    },
+    PERCENTAGE: {
+      label: 'Percent',
+      icon: FaPercent,
+      className: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300',
+    },
+    SHARES: {
+      label: 'Shares',
+      icon: FaPiggyBank,
+      className: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+    },
+    ADJUSTMENT: {
+      label: 'Adjust',
+      icon: FaSlidersH,
+      className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+    },
+    ITEMIZED: {
+      label: 'Items',
+      icon: FaListUl,
+      className: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+    },
+  };
 
-  const date = new Date(timestamp);
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Date unavailable';
-  }
-
-  return date.toLocaleString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: 'Asia/Kolkata',
-  });
+  return map[key] || map.EQUAL;
 };
 
 
@@ -173,7 +191,7 @@ export const ExpensesTab = ({ tripId }) => {
     useState(false);
 
   /*
-   * Multiple cards can be expanded on mobile.
+   * Multiple cards can be expanded on mobile and desktop.
    */
   const [expandedIds, setExpandedIds] =
     useState([]);
@@ -428,6 +446,150 @@ export const ExpensesTab = ({ tripId }) => {
         id,
       ];
     });
+  };
+
+  /* ==========================================================
+     CALCULATE BREAKDOWN
+  ========================================================== */
+
+  const calculateBreakdown = (expense) => {
+    const splitData = expense.split_data || {};
+    const participants = expense.participants || [];
+    const splitType = expense.split_type || 'EQUAL';
+    const totalAmount = Number(expense.amount || 0);
+
+    if (!participants.length) {
+      return [];
+    }
+
+    const breakdown = [];
+
+    if (splitType === 'EQUAL') {
+      const perPerson = totalAmount / participants.length;
+      participants.forEach((username) => {
+        breakdown.push({
+          username,
+          amount: perPerson,
+          percent: (100 / participants.length).toFixed(1),
+          share: 1,
+          meta: 'Equal share',
+        });
+      });
+    } else if (splitType === 'EXACT') {
+      participants.forEach((username) => {
+        const amount = Number(splitData[username] || 0);
+        breakdown.push({
+          username,
+          amount,
+          percent: ((amount / totalAmount) * 100).toFixed(1),
+          meta: `Exact amount · ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        });
+      });
+    } else if (splitType === 'PERCENTAGE') {
+      participants.forEach((username) => {
+        const percent = Number(splitData[username] || 0);
+        const amount = (totalAmount * percent) / 100;
+        breakdown.push({
+          username,
+          amount,
+          percent: percent.toFixed(1),
+          meta: `${percent.toFixed(1)}% of total`,
+        });
+      });
+    } else if (splitType === 'SHARES') {
+      const totalShares = participants.reduce(
+        (sum, username) =>
+          sum + Number(splitData[username] || 0),
+        0
+      );
+
+      participants.forEach((username) => {
+        const share = Number(splitData[username] || 0);
+        const amount = (totalAmount * share) / totalShares;
+        breakdown.push({
+          username,
+          amount,
+          share: share || 0,
+          percent: ((amount / totalAmount) * 100).toFixed(1),
+          meta: `${share || 0} shares`,
+        });
+      });
+    } else if (splitType === 'ADJUSTMENT') {
+      const adjusted = participants
+        .filter(
+          (username) =>
+            Number(splitData[username] || 0) !== 0
+        );
+      const unadjusted = participants.filter(
+        (username) =>
+          Number(splitData[username] || 0) === 0
+      );
+
+      const adjustedTotal = adjusted.reduce(
+        (sum, username) =>
+          sum + Number(splitData[username] || 0),
+        0
+      );
+
+      const remaining = totalAmount - adjustedTotal;
+      const perUnadjusted =
+        unadjusted.length > 0
+          ? remaining / unadjusted.length
+          : 0;
+
+      adjusted.forEach((username) => {
+        const amount = Number(splitData[username] || 0);
+        breakdown.push({
+          username,
+          amount,
+          percent: ((amount / totalAmount) * 100).toFixed(1),
+          isAdjusted: true,
+          meta: 'Fixed amount',
+        });
+      });
+
+      unadjusted.forEach((username) => {
+        breakdown.push({
+          username,
+          amount: perUnadjusted,
+          percent: ((perUnadjusted / totalAmount) * 100).toFixed(1),
+          isAdjusted: false,
+          meta: 'Remaining share',
+        });
+      });
+    } else if (splitType === 'ITEMIZED') {
+      const items = splitData.items || [];
+      const userItems = {};
+
+      items.forEach((item) => {
+        const itemAmount = Number(item.amount || 0);
+        const itemParticipants = item.participants || [];
+
+        if (itemParticipants.length > 0) {
+          const perPerson = itemAmount / itemParticipants.length;
+          itemParticipants.forEach((username) => {
+            if (!userItems[username]) {
+              userItems[username] = 0;
+            }
+            userItems[username] += perPerson;
+          });
+        }
+      });
+
+      participants.forEach((username) => {
+        const amount = userItems[username] || 0;
+        breakdown.push({
+          username,
+          amount,
+          percent: ((amount / totalAmount) * 100).toFixed(1),
+          meta: 'Itemized share',
+        });
+      });
+    }
+
+    return breakdown.sort((a, b) =>
+      a.username.localeCompare(b.username)
+    );
   };
 
 
@@ -826,6 +988,7 @@ export const ExpensesTab = ({ tripId }) => {
             grid
             grid-cols-1
             gap-4
+            grid-auto-rows-max
             xl:grid-cols-2
             xl:gap-5
           "
@@ -848,6 +1011,11 @@ export const ExpensesTab = ({ tripId }) => {
                   expense.id
                 );
 
+              const splitBadge = getSplitBadgeMeta(
+                expense?.split_type || expense?.splitType
+              );
+              const SplitIcon = splitBadge.icon;
+
               return (
                 <motion.article
                   key={expense.id}
@@ -859,7 +1027,7 @@ export const ExpensesTab = ({ tripId }) => {
                     opacity: 1,
                     y: 0,
                   }}
-                  layout
+                  layout="position"
                   transition={{
                     duration: 0.3,
                     delay: Math.min(
@@ -875,6 +1043,7 @@ export const ExpensesTab = ({ tripId }) => {
                   }}
                   className="
                     group
+                    h-fit
                     overflow-hidden
                     rounded-3xl
                     border
@@ -1081,148 +1250,63 @@ export const ExpensesTab = ({ tripId }) => {
                           className="
                             inline-flex
                             items-center
-                            rounded-full
-                            bg-primary-50
-                            px-2.5
+                            gap-1.5
+                            rounded-lg
+                            bg-gradient-to-r
+                            from-emerald-50
+                            to-teal-50
+                            px-3
                             py-1.5
-                            text-[10px]
+                            text-[11px]
                             font-semibold
-                            text-primary-700
-                            dark:bg-primary-950/50
-                            dark:text-primary-300
+                            tracking-wide
+                            text-emerald-700
+                            shadow-sm
+                            border
+                            border-emerald-200/60
+                            hover:shadow-md
+                            transition-shadow
+                            duration-200
+                            dark:from-emerald-950/40
+                            dark:to-teal-950/40
+                            dark:text-emerald-300
+                            dark:border-emerald-800/50
+                            dark:hover:shadow-emerald-950/20
                           "
                         >
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                           {expense.category}
                         </span>
                       )}
 
-                    </div>
-
-
-                    {/* =================================================
-                        DESKTOP DETAILS
-
-                        Always visible on desktop.
-                    ================================================= */}
-
-                    <div
-                      className="
-                        mt-4
-                        hidden
-                        rounded-2xl
-                        border
-                        border-slate-200
-                        bg-slate-50/70
-                        p-3.5
-                        lg:block
-                        dark:border-slate-800
-                        dark:bg-slate-950/50
-                      "
-                    >
-
-                      <div
-                        className="
-                          grid
-                          grid-cols-1
-                          gap-3
-                          xl:grid-cols-2
-                        "
+                      <span
+                        className={`
+                          inline-flex
+                          items-center
+                          gap-1.5
+                          rounded-full
+                          px-2.5
+                          py-1.5
+                          text-[10px]
+                          font-semibold
+                          ${splitBadge.className}
+                        `}
                       >
-
-                        <div
-                          className="
-                            min-w-0
-                          "
-                        >
-
-                          <p
-                            className="
-                              flex
-                              items-center
-                              gap-1.5
-                              text-[10px]
-                              font-bold
-                              uppercase
-                              tracking-wider
-                              text-slate-400
-                            "
-                          >
-                            <FaUsers className="h-2.5 w-2.5" />
-                            Participants
-                          </p>
-
-                          <p
-                            className="
-                              mt-1
-                              break-words
-                              text-xs
-                              leading-5
-                              text-slate-700
-                              dark:text-slate-300
-                            "
-                          >
-                            {expense.participants
-                              ?.length
-                              ? expense.participants.join(
-                                  ', '
-                                )
-                              : '—'}
-                          </p>
-
-                        </div>
-
-
-                        <div>
-
-                          <p
-                            className="
-                              flex
-                              items-center
-                              gap-1.5
-                              text-[10px]
-                              font-bold
-                              uppercase
-                              tracking-wider
-                              text-slate-400
-                            "
-                          >
-                            <FaCalendarAlt className="h-2.5 w-2.5" />
-                            Added
-                          </p>
-
-                          <p
-                            className="
-                              mt-1
-                              text-xs
-                              text-slate-600
-                              dark:text-slate-300
-                            "
-                          >
-                            {formatExpenseDate(
-                              expense.timestamp
-                            )}
-                          </p>
-
-                        </div>
-
-                      </div>
+                        <SplitIcon className="h-2.5 w-2.5" />
+                        {splitBadge.label}
+                      </span>
 
                     </div>
 
 
                     {/* =================================================
-                        MOBILE DETAILS TOGGLE
+                        UNIFIED DETAILS & BREAKDOWN
 
-                        Mobile only.
+                        Single expandable section for all devices.
+                        Shows: Participants, Date, Split Method, Breakdown
                     ================================================= */}
 
-                    <div
-                      className="
-                        mt-4
-                        lg:hidden
-                      "
-                    >
-
+                    <div className="mt-4">
                       <button
                         type="button"
                         onClick={() =>
@@ -1260,196 +1344,169 @@ export const ExpensesTab = ({ tripId }) => {
                           dark:hover:bg-primary-950/20
                         "
                       >
-
                         <span
                           className="
+                            flex
+                            items-center
+                            gap-2
                             text-xs
                             font-semibold
                             text-slate-600
                             dark:text-slate-300
                           "
                         >
+                          <FaReceipt className="h-3 w-3" />
                           {isExpanded
                             ? 'Hide details'
-                            : 'View details'}
+                            : 'View more'}
                         </span>
 
-                        <span
-                          className="
-                            flex
-                            h-6
-                            w-6
-                            items-center
-                            justify-center
-                            rounded-full
-                            bg-white
+                        <FaChevronDown
+                          className={`
+                            h-2.5
+                            w-2.5
+                            transition-transform
+                            duration-300
                             text-slate-400
-                            shadow-sm
-                            dark:bg-slate-800
-                          "
-                        >
-
-                          <FaChevronDown
-                            className={`
-                              h-2.5
-                              w-2.5
-                              transition-transform
-                              duration-300
-                              ${
-                                isExpanded
-                                  ? 'rotate-180'
-                                  : ''
-                              }
-                            `}
-                          />
-
-                        </span>
-
+                            ${
+                              isExpanded
+                                ? 'rotate-180'
+                                : ''
+                            }
+                          `}
+                        />
                       </button>
 
-
-                      {/* =================================================
-                          MOBILE EXPANDED CONTENT
-                      ================================================= */}
-
-                      <AnimatePresence
-                        initial={false}
-                      >
-
+                      <AnimatePresence initial={false}>
                         {isExpanded && (
                           <motion.div
                             initial={{
-                              height: 0,
                               opacity: 0,
+                              y: -8,
+                              scale: 0.985,
                             }}
                             animate={{
-                              height: 'auto',
                               opacity: 1,
+                              y: 0,
+                              scale: 1,
                             }}
                             exit={{
-                              height: 0,
                               opacity: 0,
+                              y: -6,
+                              scale: 0.985,
                             }}
                             transition={{
-                              height: {
-                                duration: 0.3,
-                                ease: [
-                                  0.22,
-                                  1,
-                                  0.36,
-                                  1,
-                                ],
-                              },
-                              opacity: {
-                                duration: 0.2,
-                              },
+                              duration: 0.22,
+                              ease: [0.22, 1, 0.36, 1],
                             }}
-                            className="
-                              overflow-hidden
-                            "
+                            className="overflow-hidden"
                           >
-
                             <div
                               id={`expense-${expense.id}-details`}
                               className="
-                                mt-3
                                 rounded-2xl
                                 border
-                                border-slate-200
-                                bg-slate-50/70
+                                border-slate-300
+                                bg-slate-100
                                 p-3.5
-                                dark:border-slate-800
-                                dark:bg-slate-950/50
+                                shadow-[0_10px_30px_rgba(15,23,42,0.06)]
+                                dark:border-slate-700
+                                dark:bg-slate-800
+                                dark:shadow-[0_12px_32px_rgba(2,6,23,0.35)]
                               "
                             >
-
-                              <div
-                                className="
-                                  space-y-3
-                                "
-                              >
-
-                                <div>
-
-                                  <p
-                                    className="
-                                      flex
-                                      items-center
-                                      gap-1.5
-                                      text-[10px]
-                                      font-bold
-                                      uppercase
-                                      tracking-wider
-                                      text-slate-400
-                                    "
-                                  >
-                                    <FaUsers className="h-2.5 w-2.5" />
-                                    Participants
-                                  </p>
-
-                                  <p
-                                    className="
-                                      mt-1
-                                      break-words
-                                      text-xs
-                                      leading-5
-                                      text-slate-700
-                                      dark:text-slate-300
-                                    "
-                                  >
-                                    {expense.participants
-                                      ?.length
-                                      ? expense.participants.join(
-                                          ', '
-                                        )
-                                      : '—'}
-                                  </p>
-
-                                </div>
-
-
-                                <div>
-
-                                  <p
-                                    className="
-                                      flex
-                                      items-center
-                                      gap-1.5
-                                      text-[10px]
-                                      font-bold
-                                      uppercase
-                                      tracking-wider
-                                      text-slate-400
-                                    "
-                                  >
-                                    <FaCalendarAlt className="h-2.5 w-2.5" />
-                                    Added
-                                  </p>
-
-                                  <p
-                                    className="
-                                      mt-1
-                                      text-xs
-                                      text-slate-600
-                                      dark:text-slate-300
-                                    "
-                                  >
-                                    {formatExpenseDate(
-                                      expense.timestamp
-                                    )}
-                                  </p>
-
-                                </div>
-
+                              {/* Participants */}
+                              <div className="mb-3 pb-3 border-b border-slate-300 dark:border-slate-700">
+                                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                                  Participants
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-slate-700 dark:text-slate-300">
+                                  {expense.participants?.length
+                                    ? expense.participants.join(', ')
+                                    : '—'}
+                                </p>
                               </div>
 
-                            </div>
+                              {/* Split Type */}
+                              <div className="mb-2.5 pb-2.5 border-b border-slate-300 dark:border-slate-700">
+                                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                                  Split Method
+                                </p>
+                                <p className="mt-0.5 text-xs font-semibold text-slate-900 dark:text-slate-100">
+                                  {(() => {
+                                    const splitType = expense.split_type || 'EQUAL';
+                                    const map = {
+                                      EQUAL: 'Equally Split',
+                                      EXACT: 'Exact Amounts',
+                                      PERCENTAGE: 'By Percentage',
+                                      SHARES: 'By Shares',
+                                      ADJUSTMENT: 'Adjustment',
+                                      ITEMIZED: 'Itemized',
+                                    };
+                                    return map[splitType] || 'Unknown';
+                                  })()}
+                                </p>
+                              </div>
 
+                              {/* Breakdown - Compact */}
+                              <div className="space-y-1.5 mb-2">
+                                {calculateBreakdown(expense).map((item, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="
+                                      flex
+                                      items-center
+                                      justify-between
+                                      rounded-xl
+                                      border
+                                      border-slate-200
+                                      bg-white/70
+                                      px-2.5
+                                      py-2
+                                      dark:border-slate-700
+                                      dark:bg-slate-900/60
+                                    "
+                                  >
+                                    <div className="min-w-0 flex-1 pr-2">
+                                      <p className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
+                                        {item.username}
+                                      </p>
+                                      <p className="mt-0.5 text-[10px] text-slate-600 dark:text-slate-400">
+                                        {item.meta || `${item.percent}% of total`}
+                                      </p>
+                                    </div>
+
+                                    <div className="ml-2 shrink-0 text-right">
+                                      <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                        ₹{item.amount.toLocaleString('en-IN', {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
+                                      </p>
+                                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                        {item.percent}%
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Total - Compact */}
+                              <div className="border-t border-slate-300 pt-2 dark:border-slate-700 flex items-center justify-between text-xs">
+                                <p className="font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-400">
+                                  Total
+                                </p>
+                                <p className="font-bold text-slate-900 dark:text-slate-100">
+                                  ₹{Number(expense.amount || 0).toLocaleString('en-IN', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </p>
+                              </div>
+                            </div>
                           </motion.div>
                         )}
-
                       </AnimatePresence>
-
                     </div>
 
                   </div>

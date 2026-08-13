@@ -45,7 +45,9 @@ CREATE OR REPLACE FUNCTION public.insert_expense_with_outbox(
   p_amount NUMERIC,
   p_description TEXT,
   p_category VARCHAR,
-  p_participants TEXT[]
+  p_participants TEXT[],
+  p_split_type VARCHAR DEFAULT 'EQUAL',
+  p_split_data JSONB DEFAULT '{}'::jsonb
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -54,10 +56,27 @@ DECLARE
   v_expense_id UUID;
   v_expense_record JSONB;
 BEGIN
-  -- 1. Insert Expense
-  INSERT INTO public.expenses (trip_id, payer_username, amount, description, category, participants)
-  VALUES (p_trip_id, p_payer_username, p_amount, p_description, p_category, p_participants)
-  RETURNING id, trip_id, payer_username, amount, description, category, participants, timestamp
+  INSERT INTO public.expenses (
+    trip_id,
+    payer_username,
+    amount,
+    description,
+    category,
+    participants,
+    split_type,
+    split_data
+  )
+  VALUES (
+    p_trip_id,
+    p_payer_username,
+    p_amount,
+    p_description,
+    p_category,
+    p_participants,
+    COALESCE(p_split_type, 'EQUAL'),
+    COALESCE(p_split_data, '{}'::jsonb)
+  )
+  RETURNING id, trip_id, payer_username, amount, description, category, participants, split_type, split_data, timestamp
   INTO v_expense_id;
 
   v_expense_record := jsonb_build_object(
@@ -67,10 +86,11 @@ BEGIN
     'amount', p_amount,
     'description', p_description,
     'category', p_category,
-    'participants', p_participants
+    'participants', p_participants,
+    'split_type', COALESCE(p_split_type, 'EQUAL'),
+    'split_data', COALESCE(p_split_data, '{}'::jsonb)
   );
 
-  -- 2. Insert into Outbox (atomic transaction with expense creation)
   INSERT INTO public.outbox_events (aggregate_type, aggregate_id, event_type, payload, status)
   VALUES ('EXPENSE', p_trip_id::text, 'EXPENSE_CREATED', v_expense_record, 'pending');
 

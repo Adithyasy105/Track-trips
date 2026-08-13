@@ -3,13 +3,75 @@ import { supabase } from '../services/supabaseClient.js';
 import { syncPendingPaymentsForTrip } from './paymentsController.js';
 import { invalidateTripCaches } from '../services/redisClient.js';
 import { emitToTrip } from '../services/socketService.js';
+import { resolveExpenseAllocations, normalizeParticipants, toPaise } from '../utils/splitEngine.js';
+
+const normalizeSplitData = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value;
+};
+
+const insertExpenseRecord = async ({ trip_id, payer_username, amount, description, category, participants, splitType, splitData, includeSplitMetadata = true }) => {
+  const baseInsert = {
+    trip_id,
+    payer_username,
+    amount,
+    description,
+    category,
+    participants,
+  };
+
+  if (includeSplitMetadata) {
+    return supabase
+      .from('expenses')
+      .insert([
+        {
+          ...baseInsert,
+          split_type: splitType,
+          split_data: splitData,
+        },
+      ])
+      .select();
+  }
+
+  return supabase
+    .from('expenses')
+    .insert([baseInsert])
+    .select();
+};
 
 export const addExpense = async (req, res, next) => {
   try {
-    const { trip_id, amount, description, category, participants } = req.body;
-    const payer_username = req.user.username;
+    const {
+      trip_id,
+      amount,
+      description,
+      category,
+      participants,
+      payer_username: incomingPayer,
+      split_type,
+      split_data,
+    } = req.body;
 
-    // Verify user has access to trip
+    const payer_username = incomingPayer || req.user.username;
+    const normalizedParticipants = normalizeParticipants(participants || []);
+    const splitType = String(split_type || 'EQUAL').toUpperCase();
+    const splitData = normalizeSplitData(split_data);
+
+    if (!trip_id) {
+      return res.status(400).json({ error: 'Trip ID is required.' });
+    }
+
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+      return res.status(400).json({ error: 'Expense amount must be greater than zero.' });
+    }
+
+    if (!normalizedParticipants.length) {
+      return res.status(400).json({ error: 'Select at least one person.' });
+    }
+
     const { data: trip, error: tripError } = await supabase
       .from('trips')
       .select('group_id')
@@ -21,7 +83,6 @@ export const addExpense = async (req, res, next) => {
       return res.status(404).json({ error: 'Trip not found' });
     }
 
-    // Verify membership
     const { data: membership } = await supabase
       .from('group_members')
       .select('*')
@@ -33,43 +94,125 @@ export const addExpense = async (req, res, next) => {
       return res.status(403).json({ error: 'You are not a member of this group' });
     }
 
-    // Verify all participants are trip members
     const { data: tripMembers } = await supabase
       .from('trip_members')
       .select('username')
       .eq('trip_id', trip_id);
 
-    const memberUsernames = tripMembers.map(m => m.username);
-    const invalidParticipants = participants.filter(p => !memberUsernames.includes(p));
+    const memberUsernames = new Set((tripMembers || []).map((member) => member.username));
+    const invalidParticipants = normalizedParticipants.filter((participant) => !memberUsernames.has(participant));
 
     if (invalidParticipants.length > 0) {
       return res.status(400).json({
-        error: `Invalid participants: ${invalidParticipants.join(', ')}`
+        error: `One or more participants are no longer members of this trip: ${invalidParticipants.join(', ')}`,
       });
     }
 
-    // Try Atomic RPC Outbox insertion first; fallback to standard insert if RPC isn't deployed yet
+    if (!memberUsernames.has(payer_username)) {
+      return res.status(400).json({ error: 'The payer must be a current trip member.' });
+    }
+
+    const totalPaise = toPaise(amount);
+    const expenseCandidate = {
+      amount,
+      participants: normalizedParticipants,
+      payer_username,
+      split_type: splitType,
+      split_data: splitData,
+    };
+
+    try {
+      const allocations = resolveExpenseAllocations(expenseCandidate, memberUsernames);
+      const totalAllocated = allocations.reduce((sum, entry) => sum + Number(entry.amountPaise || 0), 0);
+
+      if (totalAllocated !== totalPaise) {
+        return res.status(400).json({
+          error: 'The split values do not match the total expense amount.',
+        });
+      }
+
+      if (allocations.some((entry) => (entry.amountPaise || 0) < 0)) {
+        return res.status(400).json({ error: 'No participant can owe a negative amount.' });
+      }
+    } catch (validationError) {
+      return res.status(400).json({
+        error: validationError.message || 'Invalid split configuration.',
+      });
+    }
+
     let newExpenseRecord = null;
+
     const { data: rpcData, error: rpcError } = await supabase.rpc('insert_expense_with_outbox', {
       p_trip_id: trip_id,
       p_payer_username: payer_username,
       p_amount: amount,
       p_description: description,
       p_category: category,
-      p_participants: participants,
+      p_participants: normalizedParticipants,
+      p_split_type: splitType,
+      p_split_data: splitData,
     });
 
     if (!rpcError && rpcData) {
       newExpenseRecord = rpcData;
     } else {
-      // Standard insert fallback
-      const { data: expense, error } = await supabase
-        .from('expenses')
-        .insert([{ trip_id, payer_username, amount, description, category, participants }])
-        .select();
+      const fallbackCandidate = {
+        trip_id,
+        payer_username,
+        amount,
+        description,
+        category,
+        participants: normalizedParticipants,
+      };
 
-      if (error) throw error;
-      newExpenseRecord = expense[0];
+      let insertResponse;
+      let insertError = null;
+
+      try {
+        insertResponse = await insertExpenseRecord({
+          trip_id,
+          payer_username,
+          amount,
+          description,
+          category,
+          participants: normalizedParticipants,
+          splitType,
+          splitData,
+          includeSplitMetadata: true,
+        });
+      } catch (error) {
+        insertError = error;
+      }
+
+      if (insertError || insertResponse?.error) {
+        const retryResponse = await insertExpenseRecord({
+          trip_id,
+          payer_username,
+          amount,
+          description,
+          category,
+          participants: normalizedParticipants,
+          splitType,
+          splitData,
+          includeSplitMetadata: false,
+        });
+
+        if (retryResponse?.error) {
+          throw retryResponse.error;
+        }
+
+        newExpenseRecord = retryResponse?.data?.[0] || {
+          ...fallbackCandidate,
+          split_type: splitType,
+          split_data: splitData,
+        };
+      } else {
+        newExpenseRecord = insertResponse?.data?.[0] || {
+          ...fallbackCandidate,
+          split_type: splitType,
+          split_data: splitData,
+        };
+      }
     }
 
     try {

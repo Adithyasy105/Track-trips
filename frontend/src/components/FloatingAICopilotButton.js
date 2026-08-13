@@ -9,6 +9,7 @@ export const FloatingAICopilotButton = () => {
   const location = useLocation();
   const [tooltip, setTooltip] = useState(false);
   const [copilotVisible, setCopilotVisible] = useState(false);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 640 : false);
   // Track active tab to adjust positioning when Expenses FAB is present
   const [activeTab, setActiveTab] = useState('overview');
@@ -26,14 +27,20 @@ export const FloatingAICopilotButton = () => {
       if (e.detail) setActiveTab(e.detail);
     };
     const handleResize = () => setIsMobile(window.innerWidth < 640);
+    const handleExpenseModalOpen = () => setExpenseModalOpen(true);
+    const handleExpenseModalClosed = () => setExpenseModalOpen(false);
 
     window.addEventListener('active-tab-changed', handleTabChanged);
     window.addEventListener('resize', handleResize);
+    window.addEventListener('expense-modal-open', handleExpenseModalOpen);
+    window.addEventListener('expense-modal-closed', handleExpenseModalClosed);
     handleResize();
 
     return () => {
       window.removeEventListener('active-tab-changed', handleTabChanged);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('expense-modal-open', handleExpenseModalOpen);
+      window.removeEventListener('expense-modal-closed', handleExpenseModalClosed);
     };
   }, []);
 
@@ -43,8 +50,8 @@ export const FloatingAICopilotButton = () => {
 
   if (hiddenPaths.includes(location.pathname) || !isTripPage) return null;
 
-  // Hide when AI Copilot tab is open
-  if (copilotVisible) return null;
+  // Hide the entire floating button stack whenever the add-expense modal is open.
+  if (copilotVisible || expenseModalOpen) return null;
 
   // On mobile, keep the relevant quick-add action stacked above AI.
   const isExpensesTab = activeTab === 'expenses';
@@ -104,7 +111,7 @@ export const FloatingAICopilotButton = () => {
         </motion.button>
       )}
 
-      {isMobile && isExpensesTab && (
+      {isMobile && isExpensesTab && !expenseModalOpen && (
         <motion.button
           onClick={handleExpenseClick}
           initial={{ scale: 0, opacity: 0 }}
