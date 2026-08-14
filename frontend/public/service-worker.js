@@ -1,7 +1,7 @@
 /* TripSync PWA worker: static assets only. Never caches API or authenticated data. */
 // Bump this whenever PWA metadata/assets change so browsers discard stale
 // manifests and favicon declarations from an older worker.
-const CACHE_NAME = 'tripsync-static-v2';
+const CACHE_NAME = 'tripsync-static-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -43,6 +43,13 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  // Always refresh HTML and PWA metadata so SEO/PWA updates are not hidden
+  // behind an older app-shell cache.
+  if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/manifest.json')) {
+    event.respondWith(fetch(request).catch(() => caches.match(request)));
+    return;
+  }
   if (request.method !== 'GET' || url.origin !== self.location.origin || isApiOrAuthenticated(request, url)) return;
 
   if (request.mode === 'navigate') {
