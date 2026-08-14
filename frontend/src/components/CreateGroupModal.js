@@ -15,7 +15,13 @@ export const CreateGroupModal = ({ isOpen, onClose, onSuccess }) => {
     setLoading(true);
 
     try {
-      await groupsAPI.create(formData);
+      const password = formData.password.trim();
+      const payload = {
+        name: formData.name.trim(),
+        ...(password ? { password } : {}),
+      };
+
+      await groupsAPI.create(payload);
       toast.success('Group created successfully!');
       setFormData({ name: '', password: '' });
       onSuccess();
@@ -70,8 +76,9 @@ export const CreateGroupModal = ({ isOpen, onClose, onSuccess }) => {
                     type={showPassword ? 'text' : 'password'}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    minLength={6}
                     className="input-field pr-10"
-                    placeholder="Leave empty for public group"
+                    placeholder="Leave empty for public group (6+ characters)"
                   />
                   <button
                     type="button"
@@ -82,6 +89,7 @@ export const CreateGroupModal = ({ isOpen, onClose, onSuccess }) => {
                     {showPassword ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">If set, the password must be at least 6 characters.</p>
               </div>
 
               <div className="flex space-x-2 pt-4">

@@ -63,12 +63,25 @@ export function computeSettlements(validExpenses, memberSet, completedPayments =
 
   const balances = {};
   for (const username of memberSet) {
+    // Keep the displayed components and final net mathematically consistent.
+    // A completed transfer is an outgoing payment for `from` and an incoming
+    // receipt for `to`; represent those transfers in the same paid/owes
+    // components instead of changing net independently.
+    const completedOutgoingPaise = (completedPayments || [])
+      .filter((payment) => payment?.from_username === username)
+      .reduce((sum, payment) => sum + Math.round(Number(payment?.amount || 0) * 100), 0);
+    const completedIncomingPaise = (completedPayments || [])
+      .filter((payment) => payment?.to_username === username)
+      .reduce((sum, payment) => sum + Math.round(Number(payment?.amount || 0) * 100), 0);
+
     balances[username] = {
-      paid: Number((paidPaise[username] / 100).toFixed(2)),
-      owes: Number((owesPaise[username] / 100).toFixed(2)),
+      paid: Number(((paidPaise[username] + completedOutgoingPaise) / 100).toFixed(2)),
+      owes: Number(((owesPaise[username] + completedIncomingPaise) / 100).toFixed(2)),
       net: Number((netPaise[username] / 100).toFixed(2)),
     };
   }
+
+  assertSettlementInvariants(balances, netPaise);
 
   const THRESHOLD = 1;
   const creditors = [];
@@ -107,5 +120,55 @@ export function computeSettlements(validExpenses, memberSet, completedPayments =
     if (debtor.amountPaise < THRESHOLD) debtorIndex += 1;
   }
 
+  for (const settlement of settlements) {
+    if (!(netPaise[settlement.from] < -THRESHOLD && netPaise[settlement.to] > THRESHOLD)) {
+      throw new Error(`Settlement direction invariant violated for ${settlement.from} -> ${settlement.to}`);
+    }
+  }
+
   return { balances, settlements };
+}
+
+export function assertSettlementInvariants(balances, netPaise = null, tolerancePaise = 1) {
+  const entries = Object.entries(balances || {});
+  const totalNetPaise = entries.reduce((sum, [, balance]) => sum + Math.round(Number(balance?.net || 0) * 100), 0);
+  if (Math.abs(totalNetPaise) > tolerancePaise) {
+    throw new Error(`Settlement invariant violated: final nets do not sum to zero (${totalNetPaise} paise)`);
+  }
+
+  for (const [username, balance] of entries) {
+    const paidPaise = Math.round(Number(balance?.paid || 0) * 100);
+    const owesPaise = Math.round(Number(balance?.owes || 0) * 100);
+    const netPaiseValue = Math.round(Number(balance?.net || 0) * 100);
+    if (Math.abs(netPaiseValue - (paidPaise - owesPaise)) > tolerancePaise) {
+      throw new Error(`Settlement invariant violated for ${username}: net must equal paid minus owes`);
+    }
+    if ((netPaise && Math.abs(Number(netPaise[username] || 0) - netPaiseValue) > tolerancePaise)) {
+      throw new Error(`Settlement invariant violated for ${username}: net precision mismatch`);
+    }
+  }
+}
+
+export function buildSettlementSnapshot(expenses, memberSet, completedPayments = []) {
+  const validExpenses = filterValidExpenses(expenses, memberSet);
+  const { balances, settlements } = computeSettlements(
+    validExpenses,
+    memberSet,
+    completedPayments
+  );
+
+  const totalExpenses = validExpenses.reduce(
+    (sum, expense) => sum + Number(expense?.amount || 0),
+    0
+  );
+
+  return {
+    validExpenses,
+    balances,
+    settlements,
+    summary: {
+      total_expenses: Number(totalExpenses.toFixed(2)),
+      total_expenses_count: validExpenses.length,
+    },
+  };
 }

@@ -154,7 +154,12 @@ export const TripDetail = () => {
       toast.success('Trip deleted successfully');
       navigate('/dashboard');
     } catch (error) {
-      toast.error('Failed to delete trip');
+      const apiMessage =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        'Failed to delete trip';
+      toast.error(apiMessage);
     } finally {
       setDeleting(false);
     }

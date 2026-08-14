@@ -717,7 +717,9 @@ export const SpendingTab = ({
                   );
 
                 const net =
-                  paid - owes;
+                  Number.isFinite(Number(b?.net))
+                    ? Number(b.net)
+                    : paid - owes;
 
                 const finalExpense =
                   owes;

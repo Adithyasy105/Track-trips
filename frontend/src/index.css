@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  background: #f8fafc;
+}
+
+html.dark {
+  background: #111827;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 @layer base {
   body {
     @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors antialiased;

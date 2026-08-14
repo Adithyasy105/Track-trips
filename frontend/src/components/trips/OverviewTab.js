@@ -140,7 +140,10 @@ export const OverviewTab = ({ tripId, trip, onSwitchTab }) => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {Object.entries(summary.balances).map(([username, b]) => {
-              const net = (b.paid || 0) - (b.owes || 0);
+              const net =
+                Number.isFinite(Number(b?.net))
+                  ? Number(b.net)
+                  : (Number(b.paid || 0) - Number(b.owes || 0));
               return (
                 <div
                   key={username}

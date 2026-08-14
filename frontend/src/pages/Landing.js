@@ -12,6 +12,7 @@ import {
   FaCheckCircle,
 } from 'react-icons/fa';
 import { HiSparkles } from 'react-icons/hi2';
+import { PWAInstallButton } from '../components/PWAInstallPrompt';
 
 export const Landing = () => {
   const features = [
@@ -91,7 +92,8 @@ export const Landing = () => {
               TripSync
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <PWAInstallButton />
             <Link
               to="/login"
               className="text-slate-300 hover:text-white text-sm font-semibold transition"

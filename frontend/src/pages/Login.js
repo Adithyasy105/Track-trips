@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { FaUsers, FaEye, FaEyeSlash, FaExclamationCircle, FaArrowLeft } from 'react-icons/fa';
+import { PWAInstallButton } from '../components/PWAInstallPrompt';
 
 export const Login = () => {
   const [formData, setFormData] = useState({ username: '', password: '' });
@@ -40,13 +41,15 @@ export const Login = () => {
         transition={{ duration: 0.3 }}
         className="card max-w-md w-full shadow-xl border border-gray-200/80 dark:border-gray-700/80 relative"
       >
-        {/* Back to Home Button */}
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white mb-4 transition-colors"
-        >
-          <FaArrowLeft className="h-3 w-3" /> Back to Home
-        </Link>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          >
+            <FaArrowLeft className="h-3 w-3" /> Back to Home
+          </Link>
+          <PWAInstallButton showLabel className="shrink-0" title="Install TripSync app" />
+        </div>
 
         <div className="text-center mb-6">
           <div className="w-12 h-12 rounded-2xl bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300 flex items-center justify-center mx-auto mb-3 shadow-sm">

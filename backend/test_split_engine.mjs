@@ -79,7 +79,36 @@ const total5 = result5.reduce((sum, a) => sum + (a.amountPaise || 0), 0);
 console.log('  Total paise:', total5, '(should be', toPaise(100), ')');
 console.log('  Valid:', total5 === toPaise(100) ? '✓' : '✗');
 
-// Test 6: Settlement calculation with EQUAL split
+// Test 6: ITEMIZED split, including per-item remainder handling
+const test6 = {
+  amount: 100.01,
+  participants: ['alice', 'bob', 'charlie'],
+  split_type: 'ITEMIZED',
+  split_data: { items: [
+    { name: 'Tickets', amount: 50, participants: ['alice', 'bob'] },
+    { name: 'Hotel', amount: 50.01, participants: ['charlie'] },
+  ] },
+};
+const result6 = resolveExpenseAllocations(test6);
+const total6 = result6.reduce((sum, a) => sum + (a.amountPaise || 0), 0);
+if (total6 !== toPaise(100.01)) throw new Error('Itemized allocations do not add up to the bill.');
+console.log('Test 6: ITEMIZED split valid ✓', result6);
+
+// Test 7: ITEMIZED split rejects an unselected participant
+try {
+  resolveExpenseAllocations({
+    amount: 10,
+    participants: ['alice', 'bob'],
+    split_type: 'ITEMIZED',
+    split_data: { items: [{ name: 'Invalid', amount: 10, participants: ['charlie'] }] },
+  });
+  throw new Error('Expected invalid itemized participant to be rejected.');
+} catch (error) {
+  if (!String(error.message).includes('not selected')) throw error;
+  console.log('Test 7: ITEMIZED rejects unselected participant ✓');
+}
+
+// Test 8: Settlement calculation with EQUAL split
 console.log('\n=== SETTLEMENT ENGINE TESTS ===\n');
 
 console.log('Test 6: Settlement with EQUAL split');
@@ -97,7 +126,7 @@ const settlements6 = computeSettlements(expenses6, tripMembers, []);
 console.log('  Balances:', settlements6.balances);
 console.log('  Settlements:', settlements6.settlements);
 
-// Test 7: Settlement with mixed split types
+// Test 9: Settlement with mixed split types
 console.log('\nTest 7: Settlement with mixed EQUAL and EXACT splits');
 const expenses7 = [
   {

@@ -1,25 +1,50 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "TripSync",
+  "name": "TripSync — Trip Expense Splitter",
+  "description": "Track group travel expenses and settle up together.",
   "icons": [
     {
       "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
+      "sizes": "64x64",
       "type": "image/x-icon"
     },
     {
-      "src": "logo192.png",
+      "src": "icons/tripsync-192.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "logo512.png",
+      "src": "icons/tripsync-512.png",
       "type": "image/png",
       "sizes": "512x512"
+    },
+    {
+      "src": "icons/tripsync-512-maskable.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
     }
   ],
-  "start_url": ".",
+  "screenshots": [
+    {
+      "src": "screenshots/tripsync-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "TripSync mobile dashboard"
+    },
+    {
+      "src": "screenshots/tripsync-desktop.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "TripSync desktop dashboard"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "orientation": "any",
+  "theme_color": "#0284c7",
+  "background_color": "#f8fafc"
 }

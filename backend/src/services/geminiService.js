@@ -127,7 +127,255 @@ const generateContentWithFallback = async (prompt, meta = {}) => {
   };
 };
 
+const formatINR = (value) =>
+  `₹${Number(value || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const buildDeterministicCopilotSummary = (tripContext) => {
+  const totalSpentRupees = Number(tripContext.totalSpentRupees || 0);
+  const settlements = Array.isArray(tripContext.settlements) ? tripContext.settlements : [];
+  const balances = Object.entries(tripContext.balances || {});
+
+  const topBalance = balances
+    .map(([username, balance]) => ({ username, amount: Number(balance?.net || 0) }))
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+
+  if (settlements.length > 0) {
+    const primary = settlements[0];
+    const restCount = settlements.length - 1;
+    return [
+      `Trip total spent: ${formatINR(totalSpentRupees)} across ${tripContext.expenseCount || 0} expenses.`,
+      `To settle up, ${primary.from} needs to pay ${primary.to} ${formatINR(primary.amount)}.`,
+      restCount > 0
+        ? `There ${restCount === 1 ? 'is' : 'are'} ${restCount} more settlement ${restCount === 1 ? 'payment' : 'payments'} in the trip summary.`
+        : 'Once that payment is made, everyone will be fully settled.',
+    ].join(' ');
+  }
+
+  if (topBalance) {
+    if (topBalance.amount > 0) {
+      return `Trip total spent: ${formatINR(totalSpentRupees)} across ${tripContext.expenseCount || 0} expenses. ${topBalance.username} is owed ${formatINR(topBalance.amount)}.`;
+    }
+    if (topBalance.amount < 0) {
+      return `Trip total spent: ${formatINR(totalSpentRupees)} across ${tripContext.expenseCount || 0} expenses. ${topBalance.username} owes ${formatINR(Math.abs(topBalance.amount))}.`;
+    }
+  }
+
+  return `Trip total spent: ${formatINR(totalSpentRupees)} across ${tripContext.expenseCount || 0} expenses. All balances are settled.`;
+};
+
+const extractCurrencyAmounts = (text = '') => {
+  const matches = [...String(text).matchAll(/₹\s*([\d,]+(?:\.\d{1,2})?)/g)];
+  return matches
+    .map((match) => Number(String(match[1]).replace(/,/g, '')))
+    .filter((value) => Number.isFinite(value) && value >= 0);
+};
+
+const looksSuspicious = (text, tripContext) => {
+  const amounts = extractRupeeAmounts(text);
+  if (!amounts.length) return false;
+
+  const totalSpentRupees = Number(tripContext.totalSpentRupees || 0);
+  const settlementMax = Math.max(
+    0,
+    ...Object.values(tripContext.balances || {}).map((value) => Math.abs(Number(value || 0))),
+    ...(Array.isArray(tripContext.settlements) ? tripContext.settlements.map((s) => Math.abs(Number(s.amount || 0))) : []),
+  );
+  const maxReasonable = Math.max(totalSpentRupees, settlementMax, 1) * 10;
+
+  return amounts.some((amount) => amount > maxReasonable);
+};
+
 // ─── Rule-based Fast Keyword Classifier (Tier 1: 0ms, 0 API Calls) ───────────
+const extractRupeeAmounts = (text = '') => {
+  const matches = [...String(text).matchAll(/[₹â‚¹]\s*([\d,]+(?:\.\d{1,2})?)/g)];
+  return matches
+    .map((match) => Number(String(match[1]).replace(/,/g, '')))
+    .filter((value) => Number.isFinite(value) && value >= 0);
+};
+
+const collectAuthoritativeAmounts = (source = {}) => {
+  const amounts = new Set();
+  const push = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return;
+    amounts.add(numeric.toFixed(2));
+  };
+
+  push(source?.summary?.total_expenses);
+  push(source?.totalSpentRupees);
+
+  for (const expense of source?.expenses || []) {
+    push(expense?.amountRupees);
+  }
+
+  for (const balance of Object.values(source?.balances || {})) {
+    push(balance?.paid);
+    push(balance?.owes);
+    push(balance?.net);
+  }
+
+  for (const settlement of source?.settlements || []) {
+    push(settlement?.amount);
+  }
+
+  for (const amount of Object.values(source?.spendingByCategory || {})) {
+    push(amount);
+  }
+
+  return amounts;
+};
+
+const hasMismatchedAmounts = (text, source) => {
+  const amounts = extractRupeeAmounts(text);
+  if (!amounts.length) return false;
+
+  const authoritative = collectAuthoritativeAmounts(source);
+  return amounts.some((amount) => !authoritative.has(Number(amount).toFixed(2)));
+};
+
+const RUPEE_SYMBOL_SAFE = '\u20B9';
+
+const formatINRSafe = (value) =>
+  `${RUPEE_SYMBOL_SAFE}${Number(value || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const buildDeterministicSettlementExplanationSafe = (settlementData = {}, username = '') => {
+  const settlements = Array.isArray(settlementData.settlements) ? settlementData.settlements : [];
+  const balances = settlementData.balances || {};
+  const summary = settlementData.summary || {};
+  const focusName = username ? `@${username}` : 'this user';
+  const total = Number(summary.total_expenses || 0);
+
+  if (settlements.length > 0) {
+    const primary = settlements[0];
+    const restCount = settlements.length - 1;
+    return [
+      `${focusName} should settle the trip by paying ${primary.to} ${formatINRSafe(primary.amount)}.`,
+      `That comes from a total trip spend of ${formatINRSafe(total)} across ${Number(summary.total_expenses_count || 0)} expenses.`,
+      restCount > 0
+        ? `There ${restCount === 1 ? 'is' : 'are'} ${restCount} more settlement ${restCount === 1 ? 'payment' : 'payments'} in the group summary.`
+        : 'Once that payment is made, the trip is fully settled.',
+    ].join(' ');
+  }
+
+  const balanceEntries = Object.entries(balances).map(([name, balance]) => ({
+    name,
+    amount: Number(balance?.net || 0),
+  }));
+  const topBalance = balanceEntries.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+
+  if (topBalance) {
+    if (topBalance.amount > 0) {
+      return `${focusName} is owed ${formatINRSafe(topBalance.amount)} from a total trip spend of ${formatINRSafe(total)} across ${Number(summary.total_expenses_count || 0)} expenses.`;
+    }
+    if (topBalance.amount < 0) {
+      return `${focusName} owes ${formatINRSafe(Math.abs(topBalance.amount))} from a total trip spend of ${formatINRSafe(total)} across ${Number(summary.total_expenses_count || 0)} expenses.`;
+    }
+  }
+
+  return `The trip is fully settled. Total spend: ${formatINRSafe(total)} across ${Number(summary.total_expenses_count || 0)} expenses.`;
+};
+
+const buildDeterministicCopilotSummarySafe = (tripContext) => {
+  const totalSpentRupees = Number(tripContext.totalSpentRupees || 0);
+  const settlements = Array.isArray(tripContext.settlements) ? tripContext.settlements : [];
+  const balances = Object.entries(tripContext.balances || {});
+
+  const topBalance = balances
+    .map(([username, balance]) => ({ username, amount: Number(balance?.net || 0) }))
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+
+  if (settlements.length > 0) {
+    const primary = settlements[0];
+    const restCount = settlements.length - 1;
+    return [
+      `Trip total spent: ${formatINRSafe(totalSpentRupees)} across ${tripContext.expenseCount || 0} expenses.`,
+      `To settle up, ${primary.from} needs to pay ${primary.to} ${formatINRSafe(primary.amount)}.`,
+      restCount > 0
+        ? `There ${restCount === 1 ? 'is' : 'are'} ${restCount} more settlement ${restCount === 1 ? 'payment' : 'payments'} in the trip summary.`
+        : 'Once that payment is made, everyone will be fully settled.',
+    ].join(' ');
+  }
+
+  if (topBalance) {
+    if (topBalance.amount > 0) {
+      return `Trip total spent: ${formatINRSafe(totalSpentRupees)} across ${tripContext.expenseCount || 0} expenses. ${topBalance.username} is owed ${formatINRSafe(topBalance.amount)}.`;
+    }
+    if (topBalance.amount < 0) {
+      return `Trip total spent: ${formatINRSafe(totalSpentRupees)} across ${tripContext.expenseCount || 0} expenses. ${topBalance.username} owes ${formatINRSafe(Math.abs(topBalance.amount))}.`;
+    }
+  }
+
+  return `Trip total spent: ${formatINRSafe(totalSpentRupees)} across ${tripContext.expenseCount || 0} expenses. All balances are settled.`;
+};
+
+const extractRupeeAmountsSafe = (text = '') => {
+  const matches = [...String(text).matchAll(/\u20B9\s*([\d,]+(?:\.\d{1,2})?)/g)];
+  return matches
+    .map((match) => Number(String(match[1]).replace(/,/g, '')))
+    .filter((value) => Number.isFinite(value) && value >= 0);
+};
+
+const collectAuthoritativeAmountsSafe = (source = {}) => {
+  const amounts = new Set();
+  const push = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return;
+    amounts.add(numeric.toFixed(2));
+  };
+
+  push(source?.summary?.total_expenses);
+  push(source?.totalSpentRupees);
+
+  for (const expense of source?.expenses || []) {
+    push(expense?.amountRupees);
+  }
+
+  for (const balance of Object.values(source?.balances || {})) {
+    push(balance?.paid);
+    push(balance?.owes);
+    push(balance?.net);
+  }
+
+  for (const settlement of source?.settlements || []) {
+    push(settlement?.amount);
+  }
+
+  for (const amount of Object.values(source?.spendingByCategory || {})) {
+    push(amount);
+  }
+
+  return amounts;
+};
+
+const hasMismatchedAmountsSafe = (text, source) => {
+  const amounts = extractRupeeAmountsSafe(text);
+  if (!amounts.length) return false;
+
+  const authoritative = collectAuthoritativeAmountsSafe(source);
+  return amounts.some((amount) => !authoritative.has(Number(amount).toFixed(2)));
+};
+
+const looksSuspiciousSafe = (text, tripContext) => {
+  const amounts = extractRupeeAmountsSafe(text);
+  if (!amounts.length) return false;
+
+  const totalSpentRupees = Number(tripContext.totalSpentRupees || 0);
+  const settlementMax = Math.max(
+    0,
+    ...Object.values(tripContext.balances || {}).map((value) => Math.abs(Number(value?.net ?? value ?? 0))),
+    ...(Array.isArray(tripContext.settlements) ? tripContext.settlements.map((s) => Math.abs(Number(s.amount || 0))) : []),
+  );
+  const maxReasonable = Math.max(totalSpentRupees, settlementMax, 1) * 10;
+
+  return amounts.some((amount) => amount > maxReasonable);
+};
+
 const KEYWORD_MAP = [
   { keywords: ['flight', 'fly', 'indigo', 'airasia', 'vistara', 'uber', 'ola', 'cab', 'taxi', 'petrol', 'diesel', 'fuel', 'bus', 'train', 'irctc', 'toll', 'auto', 'metro', 'driver', 'parking'], category: 'Transport' },
   { keywords: ['hotel', 'resort', 'stay', 'airbnb', 'room', 'hostel', 'villa', 'lodge', 'booking', 'checkin', 'checkout'], category: 'Accommodation' },
@@ -215,7 +463,7 @@ Respond with ONLY a JSON object: {"category": "<category_name>", "confidence": <
  */
 export const explainSettlements = async (settlementData, username = '', meta = {}) => {
   if (!genAI) {
-    return '✨ AI Insights are currently unavailable. You can review the exact debt breakdown and balances in the summary cards below!';
+    return buildDeterministicSettlementExplanationSafe(settlementData, username);
   }
 
   try {
@@ -228,66 +476,69 @@ Settlement Data:
 ${JSON.stringify(settlementData, null, 2)}
 
 STRICT RULES & FORMATTING:
-1. ALWAYS use the Indian Rupee symbol (₹) for all currency amounts (e.g., ₹1,500). NEVER use Dollar ($) or any other currency symbol under any circumstances.
+1. ALWAYS use the Indian Rupee symbol (${RUPEE_SYMBOL_SAFE}) for all currency amounts (e.g., ${RUPEE_SYMBOL_SAFE}1,500). NEVER use Dollar ($) or any other currency symbol under any circumstances.
 2. Address the breakdown directly to @${username || 'user'}. Explain specifically:
    - How much @${username || 'user'} paid in total vs their calculated share.
    - Exactly how much @${username || 'user'} needs to GIVE to others or TAKE from others to settle up, and WHY.
-3. If there are other member settlements, summarize them in 1 short sentence at the end.
-4. Keep the explanation under 3 short, friendly paragraphs. Avoid repeating raw JSON code.`;
+3. The settlement array is authoritative. Do not recalculate, divide, multiply, estimate, or change any settlement amount.
+4. If there are other member settlements, summarize them in 1 short sentence at the end.
+5. Keep the explanation under 3 short, friendly paragraphs. Avoid repeating raw JSON code.`;
 
     const aiResult = await generateContentWithFallback(prompt, meta);
     if (aiResult.success) {
-      return aiResult.data || '✨ AI Insights are currently unavailable. You can review the exact debt breakdown and balances in the summary cards below!';
+      const explanation = aiResult.data || '';
+      if (!explanation || hasMismatchedAmountsSafe(explanation, settlementData)) {
+        logger.warn('[Gemini] Settlement explanation looked inconsistent; using deterministic fallback', meta);
+        return buildDeterministicSettlementExplanationSafe(settlementData, username);
+      }
+      return explanation;
     }
 
     logger.warn(`[Gemini] Settlement explanation failed: ${aiResult.message}`, { ...meta, errorId: aiResult.errorId });
-    return '✨ AI Insights are currently unavailable. You can review the exact debt breakdown and balances in the summary cards below!';
+    return buildDeterministicSettlementExplanationSafe(settlementData, username);
   } catch (err) {
     const errorId = `err_ai_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     logger.error(`[Gemini] Settlement explanation failed: ${err.message}`, { ...meta, errorId });
-    return '✨ AI Insights are currently unavailable. You can review the exact debt breakdown and balances in the summary cards below!';
+    return buildDeterministicSettlementExplanationSafe(settlementData, username);
   }
 };
 
-/**
- * AI Financial Copilot — answers natural-language questions about a trip.
- */
 export const copilotAnswer = async (tripContext, userQuestion, chatHistory = [], meta = {}) => {
   if (!genAI) {
-    return "🤖 AI Financial Copilot is currently offline. You can view all trip balances, expenses, and settlements directly in the trip tabs!";
+    return buildDeterministicCopilotSummarySafe(tripContext);
   }
 
   const contextBlock = [
     `== TRIP: ${tripContext.tripName || 'Unknown Trip'} ==`,
-    `Members: ${tripContext.members.join(', ')}`,
-    `Total Spent: ₹${(tripContext.totalSpent / 100).toFixed(2)} across ${tripContext.expenseCount} expenses`,
+    `Members: ${(tripContext.members || []).join(', ')}`,
+    `Total Spent: ${formatINRSafe(tripContext.totalSpentRupees)} across ${tripContext.expenseCount || 0} expenses`,
     '',
     '-- EXPENSES --',
-    tripContext.expenses.map(e =>
-      `  [${e.date}] ${e.description} — ₹${(e.amount_paise / 100).toFixed(2)} paid by ${e.paid_by} | Category: ${e.category} | Split among: ${e.participants.join(', ')}`
+    (tripContext.expenses || []).map((e) =>
+      `  [${e.date}] ${e.description} — ${formatINRSafe(e.amountRupees)} paid by ${e.paid_by} | Category: ${e.category} | Split among: ${(e.participants || []).join(', ')}`
     ).join('\n'),
     '',
     '-- NET BALANCES (positive = owed money, negative = owes) --',
-    Object.entries(tripContext.balances).map(([u, b]) =>
-      `  ${u}: ₹${(b / 100).toFixed(2)}`
+    Object.entries(tripContext.balances || {}).map(([u, b]) =>
+      `  ${u}: ${formatINRSafe(Number(b?.net || 0))}`
     ).join('\n'),
     '',
     '-- SETTLEMENTS NEEDED --',
-    tripContext.settlements.length > 0
-      ? tripContext.settlements.map(s =>
-          `  ${s.from} pays ${s.to} ₹${(s.amount / 100).toFixed(2)}`
+    (tripContext.settlements || []).length > 0
+      ? (tripContext.settlements || []).map((s) =>
+          `  ${s.from} pays ${s.to} ${formatINRSafe(s.amount)}`
         ).join('\n')
       : '  All settled!',
     '',
     '-- SPENDING BY CATEGORY --',
     Object.entries(tripContext.spendingByCategory || {}).map(([cat, amt]) =>
-      `  ${cat}: ₹${(amt / 100).toFixed(2)}`
+      `  ${cat}: ${formatINRSafe(amt)}`
     ).join('\n'),
   ].join('\n');
 
   const historyBlock = chatHistory.length > 0
     ? '\n\n== PREVIOUS CONVERSATION ==\n' +
-      chatHistory.map(h => `${h.role === 'user' ? 'User' : 'AI'}: ${h.text}`).join('\n')
+      chatHistory.map((h) => `${h.role === 'user' ? 'User' : 'AI'}: ${h.text}`).join('\n')
     : '';
 
   const prompt = `You are TripSync's AI Financial Copilot — a friendly, smart assistant that answers questions about group trip expenses with precision.
@@ -299,24 +550,31 @@ ${contextBlock}${historyBlock}
 ${userQuestion}
 
 STRICT INSTRUCTIONS:
-- ALWAYS use the Indian Rupee symbol (₹) for all currency amounts (e.g. ₹500, ₹2,500). NEVER use Dollar ($) or any other currency symbol under any circumstances.
+- ALWAYS use the Indian Rupee symbol (${RUPEE_SYMBOL_SAFE}) for all currency amounts (e.g. ${RUPEE_SYMBOL_SAFE}500, ${RUPEE_SYMBOL_SAFE}2,500). NEVER use Dollar ($) or any other currency symbol under any circumstances.
+- The trip context below is authoritative. Do not recalculate settlement amounts, and do not divide or multiply rupee values unless a field is explicitly labeled as paise.
+- Copy settlement amounts exactly from the settlements array if you mention them.
 - Answer concisely and accurately using ONLY the trip data above.
-- Mention specific amounts in ₹ and member names.
+- Mention specific amounts in ${RUPEE_SYMBOL_SAFE} and member names.
 - Keep answers under 150 words unless the question genuinely requires more detail.
 - Be conversational, helpful, and friendly.`;
 
   try {
     const aiResult = await generateContentWithFallback(prompt, meta);
     if (aiResult.success) {
-      return aiResult.data || "🤖 AI Financial Copilot is currently offline. You can view all trip balances, expenses, and settlements directly in the trip tabs!";
+      const answer = aiResult.data || '';
+      if (looksSuspiciousSafe(answer, tripContext) || hasMismatchedAmountsSafe(answer, tripContext)) {
+        logger.warn('[Gemini] Copilot output looked inconsistent; using deterministic fallback', meta);
+        return buildDeterministicCopilotSummarySafe(tripContext);
+      }
+      return answer || buildDeterministicCopilotSummarySafe(tripContext);
     }
 
     const errorId = aiResult.errorId || `err_ai_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     logger.warn(`[Gemini] Copilot answer failed: ${aiResult.message}`, { ...meta, errorId });
-    return "🤖 I encountered a temporary issue analyzing your trip data. Please try asking again!";
+    return buildDeterministicCopilotSummarySafe(tripContext);
   } catch (err) {
     const errorId = `err_ai_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     logger.error(`[Gemini] Copilot answer failed: ${err.message}`, { ...meta, errorId });
-    return "🤖 I encountered a temporary issue analyzing your trip data. Please try asking again!";
+    return buildDeterministicCopilotSummarySafe(tripContext);
   }
 };

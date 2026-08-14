@@ -158,6 +158,58 @@ const cardVariants = {
   },
 };
 
+const DeleteConfirmDialog = ({
+  open,
+  place,
+  loading,
+  onCancel,
+  onConfirm,
+}) => {
+  if (!open || !place) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">
+            <FaTrash className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              Delete place
+            </h3>
+            <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Remove{' '}
+              <span className="font-semibold text-slate-900 dark:text-white">
+                {place.name || 'this place'}
+              </span>{' '}
+              from the trip? This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {loading ? 'Deleting...' : 'Delete place'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ============================================================
    SMALL UI COMPONENTS
 ============================================================ */
@@ -991,6 +1043,11 @@ export const PlacesTab = ({ tripId }) => {
   const [expandedPlaceId, setExpandedPlaceId] =
     useState(null);
 
+  const [deleteTarget, setDeleteTarget] =
+    useState(null);
+  const [deleteLoading, setDeleteLoading] =
+    useState(false);
+
   const [searchQuery, setSearchQuery] =
     useState('');
 
@@ -1082,22 +1139,25 @@ export const PlacesTab = ({ tripId }) => {
       return;
     }
 
-    const confirmed = window.confirm(
-      'Remove this place from the trip?'
-    );
+    const targetPlace = places.find((place) => place.id === placeId) || null;
+    if (!targetPlace) return;
 
-    if (!confirmed) {
-      return;
-    }
+    setDeleteTarget(targetPlace);
+  };
+
+  const confirmDeletePlace = async () => {
+    if (!deleteTarget?.id) return;
 
     try {
-      await placesAPI.delete(placeId);
+      setDeleteLoading(true);
+      await placesAPI.delete(deleteTarget.id);
 
       toast.success(
         'Place removed from your journey'
       );
 
       setExpandedPlaceId(null);
+      setDeleteTarget(null);
 
       await loadPlaces();
     } catch (error) {
@@ -1109,6 +1169,8 @@ export const PlacesTab = ({ tripId }) => {
       toast.error(
         'Failed to remove place'
       );
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -1276,11 +1338,11 @@ export const PlacesTab = ({ tripId }) => {
             rounded-[28px]
             border
             border-slate-200/80
-            bg-white
+            bg-gradient-to-br from-white via-sky-50/70 to-primary-50/60
             p-5
             shadow-[0_20px_60px_-35px_rgba(15,23,42,0.5)]
             dark:border-slate-800
-            dark:bg-slate-900/90
+            dark:from-slate-900 dark:via-slate-900 dark:to-primary-950/40
             sm:p-7
           "
         >
@@ -1936,6 +1998,14 @@ export const PlacesTab = ({ tripId }) => {
           sm:flex-row
           sm:items-center
           sm:justify-between
+          rounded-2xl
+          border border-slate-200/80
+          bg-white/80
+          p-2.5
+          shadow-[0_10px_30px_-24px_rgba(15,23,42,0.5)]
+          backdrop-blur-sm
+          dark:border-slate-800
+          dark:bg-slate-900/70
         "
       >
         {/* SEARCH */}
@@ -2626,6 +2696,17 @@ export const PlacesTab = ({ tripId }) => {
       {/* ======================================================
           MODAL
       ====================================================== */}
+
+      <DeleteConfirmDialog
+        open={Boolean(deleteTarget)}
+        place={deleteTarget}
+        loading={deleteLoading}
+        onCancel={() => {
+          if (deleteLoading) return;
+          setDeleteTarget(null);
+        }}
+        onConfirm={confirmDeletePlace}
+      />
 
       <AddPlaceModal
         isOpen={showModal}

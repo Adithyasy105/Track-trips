@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { FaMoon, FaSun, FaSignOutAlt, FaHome, FaUsers } from 'react-icons/fa';
+import { PWAInstallButton } from './PWAInstallPrompt';
 
 export const Layout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -50,6 +51,8 @@ export const Layout = ({ children }) => {
                   </span>
                 </>
               )}
+
+              <PWAInstallButton />
 
               {/* Dark mode toggle */}
               <button

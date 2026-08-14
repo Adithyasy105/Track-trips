@@ -1,6 +1,6 @@
 // src/controllers/paymentsController.js
 import { supabase } from '../services/supabaseClient.js';
-import { computeSettlements, filterValidExpenses } from '../utils/settlementAlgo.js';
+import { buildSettlementSnapshot } from '../utils/settlementAlgo.js';
 import { emitToTrip } from '../services/socketService.js';
 import { invalidateTripCaches } from '../services/redisClient.js';
 
@@ -20,9 +20,12 @@ const calculateSettlements = async (trip_id) => {
   const memberSet = new Set((membersResult.data || []).map((m) => m.username));
   if (memberSet.size === 0) return [];
 
-  const validExpenses = filterValidExpenses(expensesResult.data, memberSet);
-  const { settlements } = computeSettlements(validExpenses, memberSet, completedResult.data || []);
-  return settlements;
+  const snapshot = buildSettlementSnapshot(
+    expensesResult.data || [],
+    memberSet,
+    completedResult.data || []
+  );
+  return snapshot.settlements;
 };
 
 export const syncPendingPaymentsForTrip = async (trip_id, actorUsername, options = {}) => {

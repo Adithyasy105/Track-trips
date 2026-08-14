@@ -15,6 +15,7 @@ import { InviteJoin } from './pages/InviteJoin';
 import { useAuth } from './context/AuthContext';
 import { ResetPassword } from './pages/ResetPassword';
 import { FloatingAICopilotButton } from './components/FloatingAICopilotButton';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -87,6 +88,7 @@ function App() {
       <AuthProvider>
         <Router>
           <AppRoutes />
+          <PWAInstallPrompt />
           <FloatingAICopilotButton />
           <Toaster
             position="top-right"

@@ -191,6 +191,10 @@ export const calculateItemizedAllocations = (totalPaise, participants, items = [
     if (!assigned.length) {
       throw new Error(`Item "${item.name}" must be assigned to at least one participant.`);
     }
+    const unselected = assigned.filter((username) => !list.includes(username));
+    if (unselected.length) {
+      throw new Error(`Item "${item.name}" includes participants not selected for this expense: ${unselected.join(', ')}.`);
+    }
 
     const amountPaise = toPaise(item.amount ?? 0);
     itemsTotal += amountPaise;

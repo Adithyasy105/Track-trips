@@ -217,7 +217,10 @@ export const SettlementsTab = ({ tripId }) => {
         ) : (
           <div className="space-y-2.5">
             {balanceEntries.map(([username, balance]) => {
-              const net = (balance.paid || 0) - (balance.owes || 0);
+              const net =
+                Number.isFinite(Number(balance?.net))
+                  ? Number(balance.net)
+                  : (Number(balance.paid || 0) - Number(balance.owes || 0));
               return (
                 <div
                   key={username}

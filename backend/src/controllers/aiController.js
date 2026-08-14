@@ -1,7 +1,7 @@
 // src/controllers/aiController.js
 import { supabase } from '../services/supabaseClient.js';
 import { suggestCategory, explainSettlements, copilotAnswer } from '../services/geminiService.js';
-import { computeSettlements, filterValidExpenses } from '../utils/settlementAlgo.js';
+import { buildSettlementSnapshot } from '../utils/settlementAlgo.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -61,18 +61,16 @@ export const getSettlementExplanation = async (req, res, next) => {
     if (completedResult.error) throw completedResult.error;
 
     const memberSet = new Set((membersResult.data || []).map(m => m.username));
-    const validExpenses = filterValidExpenses(expensesResult.data, memberSet);
-    const { balances, settlements } = computeSettlements(validExpenses, memberSet, completedResult.data || []);
-
-    const totalSpent = validExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    const snapshot = buildSettlementSnapshot(
+      expensesResult.data || [],
+      memberSet,
+      completedResult.data || []
+    );
 
     const settlementPayload = {
-      summary: {
-        total_expenses: parseFloat(totalSpent.toFixed(2)),
-        total_expenses_count: validExpenses.length,
-      },
-      balances,
-      settlements,
+      summary: snapshot.summary,
+      balances: snapshot.balances,
+      settlements: snapshot.settlements,
     };
 
     const explanationResult = await explainSettlements(settlementPayload, username, { requestId: req.id });
@@ -140,34 +138,38 @@ export const copilotChat = async (req, res, next) => {
     if (paymentsResult.error) throw paymentsResult.error;
 
     const memberSet = new Set((membersResult.data || []).map(m => m.username));
-    const rawExpenses = expensesResult.data || [];
-    const validExpenses = filterValidExpenses(rawExpenses, memberSet);
-    const { balances, settlements } = computeSettlements(validExpenses, memberSet, paymentsResult.data || []);
+    const snapshot = buildSettlementSnapshot(
+      expensesResult.data || [],
+      memberSet,
+      paymentsResult.data || []
+    );
 
-    // Convert expenses to integer paise for the context (amounts in DB are in rupees)
-    const expensesForContext = validExpenses.map(e => ({
+    // AI receives an explicit rupee-based contract to avoid any unit ambiguity.
+    const expensesForContext = snapshot.validExpenses.map(e => ({
       date: e.timestamp ? new Date(e.timestamp).toISOString().slice(0, 10) : 'unknown',
       description: e.description,
-      amount_paise: Math.round(parseFloat(e.amount) * 100),
+      amountRupees: Number(Number(e.amount || 0).toFixed(2)),
       paid_by: e.payer_username || 'unknown',
       category: e.category || 'Other',
       participants: Array.isArray(e.participants) ? e.participants : [],
     }));
 
-    // Spending by category (in paise)
+    // Spending by category is also kept in rupees for the AI contract.
     const spendingByCategory = {};
     for (const e of expensesForContext) {
-      spendingByCategory[e.category] = (spendingByCategory[e.category] || 0) + e.amount_paise;
+      spendingByCategory[e.category] = Number(
+        ((spendingByCategory[e.category] || 0) + e.amountRupees).toFixed(2)
+      );
     }
 
     const tripContext = {
       tripName: trip.name,
       members: [...memberSet],
-      totalSpent: expensesForContext.reduce((s, e) => s + e.amount_paise, 0),
-      expenseCount: expensesForContext.length,
+      totalSpentRupees: snapshot.summary.total_expenses,
+      expenseCount: snapshot.summary.total_expenses_count,
       expenses: expensesForContext,
-      balances,   // already in paise from computeSettlements
-      settlements, // already in paise from computeSettlements
+      balances: snapshot.balances,
+      settlements: snapshot.settlements,
       spendingByCategory,
     };
 

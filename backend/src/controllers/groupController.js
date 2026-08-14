@@ -3,6 +3,7 @@ import { supabase } from '../services/supabaseClient.js';
 import { hashPassword, comparePassword } from '../utils/hash.js';
 import { getJwtSecret } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
+import { computeSettlements, filterValidExpenses, buildSettlementSnapshot } from '../utils/settlementAlgo.js';
 
 export const createGroup = async (req, res, next) => {
   try {
@@ -188,6 +189,34 @@ const checkMemberHasSettlements = async (group_id, memberUsername) => {
 
     if (tripsError) throw tripsError;
     if (!trips || trips.length === 0) return { hasSettlements: false, details: null }; // No trips, no settlements
+
+    // Use the authoritative paise-safe engine for member-removal checks.
+    for (const trip of trips) {
+      const [membersResult, expensesResult, paymentsResult] = await Promise.all([
+        supabase.from('trip_members').select('username').eq('trip_id', trip.id),
+        supabase.from('expenses').select('*').eq('trip_id', trip.id),
+        supabase.from('payments').select('from_username, to_username, amount').eq('trip_id', trip.id).eq('status', 'completed'),
+      ]);
+      if (membersResult.error) throw membersResult.error;
+      if (expensesResult.error) throw expensesResult.error;
+      if (paymentsResult.error) throw paymentsResult.error;
+      const memberSet = new Set((membersResult.data || []).map((member) => member.username));
+      const snapshot = buildSettlementSnapshot(expensesResult.data || [], memberSet, paymentsResult.data || []);
+      const memberBalance = snapshot.balances?.[memberUsername];
+      const memberSettlements = (snapshot.settlements || []).filter((settlement) => settlement.from === memberUsername || settlement.to === memberUsername);
+      if (memberBalance && (Math.abs(Number(memberBalance.net || 0)) > 0.01 || memberSettlements.length > 0)) {
+        return {
+          hasSettlements: true,
+          details: {
+            balance: Number(memberBalance.net || 0),
+            owes: memberSettlements.filter((settlement) => settlement.from === memberUsername).map((settlement) => `${settlement.to} (₹${settlement.amount.toFixed(2)})`).join(', ') || null,
+            owedBy: memberSettlements.filter((settlement) => settlement.to === memberUsername).map((settlement) => `${settlement.from} (₹${settlement.amount.toFixed(2)})`).join(', ') || null,
+            settlementCount: memberSettlements.length,
+          },
+        };
+      }
+    }
+    return { hasSettlements: false, details: null };
 
     const tripIds = trips.map(t => t.id);
 
@@ -602,6 +631,54 @@ export const deleteGroup = async (req, res, next) => {
     if (!group) return res.status(404).json({ error: 'Group not found' });
     if (group.created_by !== username) {
       return res.status(403).json({ error: 'Only the group creator can delete the group' });
+    }
+
+    const { data: trips, error: tripsError } = await supabase
+      .from('trips')
+      .select('id, name')
+      .eq('group_id', group_id);
+    if (tripsError) throw tripsError;
+
+    if (trips && trips.length > 0) {
+      for (const trip of trips) {
+        const [membersResult, expensesResult, paymentsResult, completedPaymentsResult] = await Promise.all([
+          supabase.from('trip_members').select('username').eq('trip_id', trip.id),
+          supabase.from('expenses').select('*').eq('trip_id', trip.id),
+          supabase.from('payments').select('id, from_username, to_username, amount, status, created_at').eq('trip_id', trip.id),
+          supabase.from('payments').select('from_username, to_username, amount').eq('trip_id', trip.id).eq('status', 'completed'),
+        ]);
+
+        if (membersResult.error) throw membersResult.error;
+        if (expensesResult.error) throw expensesResult.error;
+        if (paymentsResult.error) throw paymentsResult.error;
+        if (completedPaymentsResult.error) throw completedPaymentsResult.error;
+
+        const memberSet = new Set((membersResult.data || []).map((m) => m.username));
+        const validExpenses = filterValidExpenses(expensesResult.data || [], memberSet);
+        const { balances, settlements } = computeSettlements(
+          validExpenses,
+          memberSet,
+          completedPaymentsResult.data || []
+        );
+        const hasUnsettledBalances = Object.values(balances || {}).some(
+          (balance) => Math.abs(Number(balance || 0)) > 0.01
+        );
+        const hasPendingSettlementPayments = (paymentsResult.data || []).some((payment) => {
+          const status = String(payment?.status || '').trim().toLowerCase();
+          return status && status !== 'completed';
+        });
+
+        if (hasUnsettledBalances || hasPendingSettlementPayments || (settlements || []).length > 0) {
+          return res.status(400).json({
+            error: `Cannot delete group: trip "${trip.name || trip.id}" still has pending settlements. Please settle all balances before deleting the group.`,
+            trip: { id: trip.id, name: trip.name },
+            pending_payments: (paymentsResult.data || []).filter((payment) => {
+              const status = String(payment?.status || '').trim().toLowerCase();
+              return status && status !== 'completed';
+            }),
+          });
+        }
+      }
     }
 
     const { error } = await supabase.from('groups').delete().eq('id', group_id);
