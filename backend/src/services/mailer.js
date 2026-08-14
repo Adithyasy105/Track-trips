@@ -13,7 +13,7 @@ try {
   // an explicit IPv4 family below.
 }
 
-const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
+const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || 'smtp').trim().toLowerCase();
 const FROM_NAME = process.env.FROM_NAME || 'TripSync';
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
@@ -119,7 +119,15 @@ export const sendMail = async ({ to, subject, html }) => {
         subject,
         html,
       });
-      console.log('[mailer] ✅ Resend API send succeeded', result?.id ? `ID: ${result.id}` : '');
+      // Resend may return API failures in `error` without rejecting the promise.
+      if (result?.error) {
+        const resendError = new Error(result.error.message || 'Resend rejected the email');
+        resendError.code = result.error.name || 'RESEND_ERROR';
+        resendError.details = result.error;
+        throw resendError;
+      }
+      const messageId = result?.data?.id || result?.id;
+      console.log('[mailer] ✅ Resend API send succeeded', messageId ? `ID: ${messageId}` : '');
       return result;
     } catch (error) {
       console.error('[mailer] ❌ Resend API send failed:', error);
