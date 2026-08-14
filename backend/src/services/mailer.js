@@ -75,6 +75,7 @@ if (EMAIL_PROVIDER === 'resend') {
       connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 30000,
+      tls: { servername: SMTP_HOST },
       auth: { user: SMTP_USER, pass: SMTP_PASS },
       debug: process.env.SMTP_DEBUG === 'true',
       logger: process.env.SMTP_DEBUG === 'true',
