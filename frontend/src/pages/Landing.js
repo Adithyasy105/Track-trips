@@ -15,6 +15,21 @@ import { HiSparkles } from 'react-icons/hi2';
 import { PWAInstallButton } from '../components/PWAInstallPrompt';
 
 export const Landing = () => {
+  const faqs = [
+    {
+      question: 'What is TripSync?',
+      answer: 'TripSync is a free trip expense splitter that helps friends track shared travel costs, divide bills, and settle balances in one place.',
+    },
+    {
+      question: 'Can TripSync split expenses unevenly?',
+      answer: 'Yes. TripSync supports equal, exact amount, percentage, shares, adjustment, and itemized expense splits with paise-level rounding.',
+    },
+    {
+      question: 'Does TripSync work for group travel?',
+      answer: 'Yes. Create a group, add a trip, invite members, record expenses, and see who owes whom with a clear settlement breakdown.',
+    },
+  ];
+
   const features = [
     {
       icon: <HiSparkles className="text-2xl text-primary-500" />,
@@ -181,13 +196,13 @@ export const Landing = () => {
       </main>
 
       {/* Feature Grid */}
-      <section className="py-16 bg-slate-950 border-t border-slate-800/80">
+      <section id="features" aria-labelledby="features-heading" className="py-16 bg-slate-950 border-t border-slate-800/80">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-12">
             <span className="text-xs font-bold uppercase tracking-wider text-primary-400 mb-2 block">
               Architected for Travel Groups
             </span>
-            <h2 className="text-2xl sm:text-4xl font-extrabold text-white mb-3">
+            <h2 id="features-heading" className="text-2xl sm:text-4xl font-extrabold text-white mb-3">
               Everything You Need for Group Finances
             </h2>
             <p className="text-slate-400 max-w-xl mx-auto text-sm">
@@ -225,10 +240,28 @@ export const Landing = () => {
         </div>
       </section>
 
+      <section id="faq" aria-labelledby="faq-heading" className="py-16 bg-slate-900 border-t border-slate-800/80">
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="text-center mb-8">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-400">TripSync guide</p>
+            <h2 id="faq-heading" className="mt-2 text-2xl sm:text-4xl font-extrabold text-white">Trip expense splitter FAQs</h2>
+            <p className="mt-3 text-sm text-slate-400">Everything you need to start sharing travel expenses with your group.</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {faqs.map((faq) => (
+              <article key={faq.question} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+                <h3 className="text-base font-bold text-white">{faq.question}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{faq.answer}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
-      <section className="py-16 bg-slate-900 border-t border-slate-800 text-center">
+      <section aria-labelledby="cta-heading" className="py-16 bg-slate-900 border-t border-slate-800 text-center">
         <div className="max-w-3xl mx-auto px-6">
-          <h2 className="text-2xl sm:text-4xl font-extrabold mb-3">
+          <h2 id="cta-heading" className="text-2xl sm:text-4xl font-extrabold mb-3">
             Ready to split trip expenses cleanly?
           </h2>
           <p className="text-sm text-slate-300 mb-6 max-w-md mx-auto">
