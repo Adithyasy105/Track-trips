@@ -1,6 +1,17 @@
 // src/services/mailer.js
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
+import dns from 'node:dns';
+
+// Some Render instances do not have outbound IPv6 routing. Node may otherwise
+// resolve smtp.gmail.com to an IPv6 address first and fail with ENETUNREACH.
+// Prefer IPv4 for SMTP while leaving the rest of the application unchanged.
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {
+  // Older/custom Node runtimes may not expose this API; Nodemailer still gets
+  // an explicit IPv4 family below.
+}
 
 const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
 const FROM_NAME = process.env.FROM_NAME || 'TripSync';
@@ -58,9 +69,15 @@ if (EMAIL_PROVIDER === 'resend') {
       host: SMTP_HOST,
       port: SMTP_PORT,
       secure: SMTP_SECURE,
+      // Render's outbound IPv6 route is not guaranteed. Force the SMTP socket
+      // to use IPv4 so Gmail does not return ENETUNREACH on IPv6 first.
+      family: 4,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 30000,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
-      debug: true,
-      logger: true,
+      debug: process.env.SMTP_DEBUG === 'true',
+      logger: process.env.SMTP_DEBUG === 'true',
     });
 
     transporter.verify((error) => {
