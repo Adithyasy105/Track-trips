@@ -1,14 +1,20 @@
 // src/controllers/settlementController.js
 import { supabase } from '../services/supabaseClient.js';
 import { buildSettlementSnapshot } from '../utils/settlementAlgo.js';
+import { getCache, setCache } from '../services/redisClient.js';
 
 export const getTripSettlements = async (req, res, next) => {
   try {
     const { trip_id } = req.params;
     const username = req.user.username;
 
-    // Settlement data is calculated from live expenses/payments below. Do not
-    // serve a stale cached snapshot after a mutation or payment completion.
+    // Check Redis cache first
+    const cacheKey = `settlements:trip:${trip_id}`;
+    const cachedSettlements = await getCache(cacheKey);
+    if (cachedSettlements) {
+      console.log(`[Redis HIT] Returned cached settlements for trip ${trip_id}`);
+      return res.json(cachedSettlements);
+    }
 
     // Verify trip exists — use maybeSingle() so missing trip returns null (not a 406 crash)
     const { data: trip, error: tripError } = await supabase
@@ -63,6 +69,8 @@ export const getTripSettlements = async (req, res, next) => {
       summary: snapshot.summary,
     };
 
+    // Cache for 300 seconds (5 minutes) — settlements change when expenses are added
+    await setCache(cacheKey, responsePayload, 300);
     res.json(responsePayload);
   } catch (err) {
     next(err);

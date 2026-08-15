@@ -312,6 +312,15 @@ export const getTripMembers = async (req, res, next) => {
     const { id } = req.params; // trip id
     const username = req.user.username;
 
+    // Check Redis cache first
+    const cacheKey = `members:trip:${id}`;
+    const { getCache } = await import('../services/redisClient.js');
+    const cachedMembers = await getCache(cacheKey);
+    if (cachedMembers) {
+      console.log(`[Redis HIT] Returned cached members for trip ${id}`);
+      return res.json(cachedMembers);
+    }
+
     // Verify requester has access (is in the group's members)
     const { data: trip, error: tripErr } = await supabase
       .from('trips')
@@ -340,6 +349,10 @@ export const getTripMembers = async (req, res, next) => {
       full_name: m.users?.full_name,
       email: m.users?.email,
     }));
+
+    // Cache for 1800 seconds (30 minutes) — trip members rarely change
+    const { setCache } = await import('../services/redisClient.js');
+    await setCache(cacheKey, members, 1800);
     res.json(members);
   } catch (err) {
     next(err);
@@ -347,6 +360,7 @@ export const getTripMembers = async (req, res, next) => {
 };
 
 export const addTripMember = async (req, res, next) => {
+  const { invalidateTripCaches } = await import('../services/redisClient.js');
   try {
     const { id } = req.params; // trip id
     const { username: memberToAdd } = req.body;
@@ -382,6 +396,7 @@ export const addTripMember = async (req, res, next) => {
       .insert([{ trip_id: id, username: memberToAdd }]);
     if (error && error.code !== '23505') throw error; // ignore duplicate
 
+    await invalidateTripCaches(id);
     res.json({ message: 'Member added to trip' });
   } catch (err) {
     next(err);
@@ -391,6 +406,7 @@ export const addTripMember = async (req, res, next) => {
 
 
 export const removeTripMember = async (req, res, next) => {
+  const { invalidateTripCaches } = await import('../services/redisClient.js');
   try {
     const { id } = req.params; // trip id
     const { username: memberToRemove } = req.body;
@@ -514,6 +530,7 @@ export const removeTripMember = async (req, res, next) => {
       throw delPlacesErr;
     }
 
+    await invalidateTripCaches(id);
     res.json({ message: 'Member removed from trip and related data cleaned' });
   } catch (err) {
     next(err);

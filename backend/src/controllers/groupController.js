@@ -4,6 +4,7 @@ import { hashPassword, comparePassword } from '../utils/hash.js';
 import { getJwtSecret } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
 import { computeSettlements, filterValidExpenses, buildSettlementSnapshot } from '../utils/settlementAlgo.js';
+import { getCache, setCache, invalidateGroupMemberCache } from '../services/redisClient.js';
 
 export const createGroup = async (req, res, next) => {
   try {
@@ -66,6 +67,7 @@ export const joinGroup = async (req, res, next) => {
     const { error } = await supabase.from('group_members').insert([{ group_id, username }]);
 
     if (error) throw error;
+    await invalidateGroupMemberCache(group_id);
 
     res.status(200).json({
       message: 'Joined group successfully',
@@ -145,6 +147,14 @@ export const getGroupMembers = async (req, res, next) => {
   try {
     const { group_id } = req.params;
     const username = req.user.username;
+
+    // Check Redis cache first
+    const cacheKey = `members:group:${group_id}`;
+    const cachedMembers = await getCache(cacheKey);
+    if (cachedMembers) {
+      console.log(`[Redis HIT] Returned cached members for group ${group_id}`);
+      return res.json(cachedMembers);
+    }
 
     // Verify user is a member
     const { data: membership } = await supabase
@@ -515,6 +525,7 @@ export const removeGroupMember = async (req, res, next) => {
       }
     }
 
+    await invalidateGroupMemberCache(group_id);
     res.json({ message: 'Member removed and related trips deleted (if any)' });
   } catch (err) {
     next(err);

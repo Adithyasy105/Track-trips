@@ -154,6 +154,17 @@ export const invalidateCache = async (keysOrPattern) => {
 export const invalidateTripCaches = async (tripId) => {
   await invalidateCache([
     `analytics:trip:${tripId}`,
-    `settlement:trip:${tripId}`
+    `settlements:trip:${tripId}`,
+    `spending:summary:trip:${tripId}`,
+    `places:trip:${tripId}`,
+    `members:trip:${tripId}`
   ]);
+};
+
+/**
+ * Invalidate all group member caches when members change
+ * @param {string} groupId
+ */
+export const invalidateGroupMemberCache = async (groupId) => {
+  await invalidateCache([`members:group:${groupId}`]);
 };

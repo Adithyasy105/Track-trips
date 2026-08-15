@@ -1,6 +1,7 @@
 // src/controllers/placeController.js
 import { supabase } from '../services/supabaseClient.js';
 import { emitToTrip } from '../services/socketService.js';
+import { getCache, setCache, invalidateCache } from '../services/redisClient.js';
 
 export const addPlace = async (req, res, next) => {
   try {
@@ -58,6 +59,7 @@ export const addPlace = async (req, res, next) => {
       .select();
 
     if (error) throw error;
+    await invalidateCache(`places:trip:${trip_id}`);
     emitToTrip(trip_id, 'place:added', data[0]);
     res.status(201).json({ message: 'Place added successfully', place: data[0] });
   } catch (err) {
@@ -69,6 +71,14 @@ export const getTripPlaces = async (req, res, next) => {
   try {
     const { trip_id } = req.params;
     const username = req.user.username;
+
+    // Check Redis cache first
+    const cacheKey = `places:trip:${trip_id}`;
+    const cachedPlaces = await getCache(cacheKey);
+    if (cachedPlaces) {
+      console.log(`[Redis HIT] Returned cached places for trip ${trip_id}`);
+      return res.json(cachedPlaces);
+    }
 
     // Verify access
     const { data: trip, error: tripError } = await supabase
@@ -116,6 +126,8 @@ export const getTripPlaces = async (req, res, next) => {
       place.created_by && tripMemberUsernames.has(place.created_by)
     );
 
+    // Cache for 600 seconds (10 minutes) — places are added occasionally
+    await setCache(cacheKey, filteredPlaces, 600);
     res.json(filteredPlaces);
   } catch (err) {
     next(err);
