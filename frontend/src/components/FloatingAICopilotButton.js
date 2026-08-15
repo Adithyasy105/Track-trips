@@ -67,8 +67,10 @@ export const FloatingAICopilotButton = () => {
   };
 
   const handleExpenseClick = () => {
-    window.dispatchEvent(new CustomEvent('open-expense-form'));
     window.dispatchEvent(new CustomEvent('switch-trip-tab', { detail: 'expenses' }));
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent('open-expense-form'));
+    });
   };
 
   const mobileStackOffset = 'bottom-4';
@@ -114,17 +116,18 @@ export const FloatingAICopilotButton = () => {
       {isMobile && isExpensesTab && !expenseModalOpen && (
         <motion.button
           onClick={handleExpenseClick}
-          initial={{ scale: 0, opacity: 0 }}
+          initial={{ scale: 0.45, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          whileHover={{ scale: 1.07 }}
-          whileTap={{ scale: 0.93 }}
-          transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.94 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 20, mass: 0.7 }}
           aria-label="Quick add expense"
           title="Quick add expense"
           className="relative flex items-center justify-center rounded-full bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-600/30 hover:shadow-primary-600/40 border border-primary-500/30 text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 cursor-pointer"
           style={{ width: '52px', height: '52px' }}
         >
           <FaPlus className="h-4 w-4" />
+          <span className="absolute inset-0 rounded-full ring-2 ring-primary-300/60 animate-ping" />
         </motion.button>
       )}
 

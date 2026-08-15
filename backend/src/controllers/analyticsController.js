@@ -2,17 +2,27 @@ import { supabase } from '../services/supabaseClient.js';
 import { filterValidExpenses } from '../utils/settlementAlgo.js';
 import { getCache, setCache } from '../services/redisClient.js';
 
+const getTripAnalyticsCacheKey = (tripId) => `analytics:trip:${tripId}`;
+const getTripSpendingSummaryCacheKey = (tripId) => `spending:summary:trip:${tripId}`;
+
 export const getTripAnalytics = async (req, res, next) => {
   try {
     const { trip_id } = req.params;
     const username = req.user.username;
 
     // Check Redis cache first
-    const cacheKey = `analytics:trip:${trip_id}`;
+    const cacheKey = getTripAnalyticsCacheKey(trip_id);
+    const summaryCacheKey = getTripSpendingSummaryCacheKey(trip_id);
     const cachedAnalytics = await getCache(cacheKey);
     if (cachedAnalytics) {
       console.log(`[Redis HIT] Returned cached analytics for trip ${trip_id}`);
       return res.json(cachedAnalytics);
+    }
+
+    const cachedSummary = await getCache(summaryCacheKey);
+    if (cachedSummary) {
+      console.log(`[Redis HIT] Returned cached spending summary for trip ${trip_id}`);
+      return res.json({ summary: cachedSummary });
     }
 
     // Verify access to trip (BUG 4 fix: maybeSingle to prevent crash on non-existent trip)
@@ -128,6 +138,7 @@ export const getTripAnalytics = async (req, res, next) => {
     };
 
     await setCache(cacheKey, responsePayload, 300);
+    await setCache(summaryCacheKey, responsePayload.summary, 300);
     res.json(responsePayload);
   } catch (err) {
     next(err);
