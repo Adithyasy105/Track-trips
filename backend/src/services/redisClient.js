@@ -10,11 +10,23 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
 let redis = null;
 let isConnected = false;
+const readyListeners = new Set();
+
+const notifyReadyListeners = () => {
+  readyListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch (error) {
+      logger.warn(`[Redis] Ready listener failed: ${error.message}`);
+    }
+  });
+};
 
 try {
   redis = new Redis(REDIS_URL, {
     maxRetriesPerRequest: 3,
     enableOfflineQueue: false,
+    connectTimeout: 10000,
     retryStrategy(times) {
       if (times > 3) {
         logger.warn('[Redis] ⚠️ Max reconnection attempts reached. Operating in fallback mode.');
@@ -26,9 +38,10 @@ try {
 
   let hasLoggedError = false;
 
-  redis.on('connect', () => {
+  redis.on('ready', () => {
     isConnected = true;
     hasLoggedError = false;
+    notifyReadyListeners();
     logger.info('[Redis] ✅ Connected to Redis server');
   });
 
@@ -50,6 +63,12 @@ export { redis };
  * @returns {boolean}
  */
 export const isRedisReady = () => isConnected && redis && redis.status === 'ready';
+
+export const onRedisReady = (listener) => {
+  readyListeners.add(listener);
+  if (isRedisReady()) queueMicrotask(listener);
+  return () => readyListeners.delete(listener);
+};
 
 export const getRedisHealth = () => {
   if (redis && isConnected && redis.status === 'ready') {

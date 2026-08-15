@@ -2,8 +2,11 @@
 
 # Environment files
 .env
+.env.*
 .env.local
 .env.*.local
+**/.env
+**/.env.*
 
 # Dependencies (if installed at root)
 node_modules/

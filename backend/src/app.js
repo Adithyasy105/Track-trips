@@ -16,7 +16,7 @@ import { requestIdMiddleware } from './middleware/requestId.js';
 import { initSocket } from './services/socketService.js';
 import { startOutboxWorker } from './workers/outboxWorker.js';
 import { isRedisReady, getRedisHealth } from './services/redisClient.js';
-import { getKafkaHealth } from './services/kafkaProducer.js';
+import { getKafkaHealth, isKafkaEnabled } from './services/kafkaProducer.js';
 import { supabase } from './services/supabaseClient.js';
 import { logger } from './utils/logger.js';
 import { metrics } from './utils/metrics.js';
@@ -133,6 +133,10 @@ server.on('error', (err) => {
 
 server.listen(PORT, () => {
   logger.info(`🚀 Server running on port ${PORT}`);
-  // Start Transactional Outbox Worker (non-blocking)
-  startOutboxWorker(5000);
+  if (isKafkaEnabled()) {
+    // Start the transactional outbox only when a Kafka cluster is explicitly configured.
+    startOutboxWorker(5000);
+  } else {
+    logger.info('[Kafka] Disabled. Outbox worker is not running.');
+  }
 });

@@ -8,6 +8,7 @@ import { groupsAPI, tripsAPI } from '../services/api';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { CreateTripModal } from '../components/CreateTripModal';
 import { JoinGroupModal } from '../components/JoinGroupModal';
+import { useGroupSocket } from '../hooks/useSocket';
 
 export const Dashboard = () => {
   const [groups, setGroups] = useState([]);
@@ -55,6 +56,8 @@ export const Dashboard = () => {
       return [];
     }
   };
+
+  useGroupSocket(groups.map((group) => group.id), loadData);
 
   const handleGroupCreated = () => {
     loadData();

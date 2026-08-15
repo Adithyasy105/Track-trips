@@ -50,7 +50,7 @@ if (EMAIL_PROVIDER === 'resend') {
   console.log('  SMTP_HOST:', SMTP_HOST);
   console.log('  SMTP_PORT:', SMTP_PORT);
   console.log('  SMTP_USER:', SMTP_USER || '(NOT SET)');
-  console.log('  SMTP_PASS:', SMTP_PASS ? '***SET***' : '(NOT SET)');
+  console.log('  SMTP_PASS:', SMTP_PASS ? `${SMTP_PASS.slice(0, 2)}******${SMTP_PASS.slice(-2)}` : '(NOT SET)');
   console.log('  SMTP_SECURE:', SMTP_SECURE);
   console.log('  FROM_EMAIL:', FROM_EMAIL || '(NOT SET)');
   if (SMTP_HOST.includes('gmail.com')) {

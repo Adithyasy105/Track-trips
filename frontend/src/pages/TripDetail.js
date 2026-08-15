@@ -68,7 +68,17 @@ export const TripDetail = () => {
     setRefreshKey(k => k + 1);
   }, []);
 
-  useSocket(id, handleRealtimeExpenseAdded, handleRealtimeExpenseDeleted, handleRealtimeSettlementUpdated);
+  const handleRealtimePlaceChanged = useCallback(() => {
+    setRefreshKey(k => k + 1);
+  }, []);
+
+  useSocket(
+    id,
+    handleRealtimeExpenseAdded,
+    handleRealtimeExpenseDeleted,
+    handleRealtimeSettlementUpdated,
+    handleRealtimePlaceChanged
+  );
 
   // Switch tab listener
   useEffect(() => {

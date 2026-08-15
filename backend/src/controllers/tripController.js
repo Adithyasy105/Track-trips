@@ -1,6 +1,7 @@
 // src/controllers/tripController.js
 import { supabase } from '../services/supabaseClient.js';
 import { buildSettlementSnapshot } from '../utils/settlementAlgo.js';
+import { emitToGroup } from '../services/socketService.js';
 
 export const createTrip = async (req, res, next) => {
   try {
@@ -53,6 +54,7 @@ export const createTrip = async (req, res, next) => {
       if (tmErr && tmErr.code !== '23505') throw tmErr;
     }
 
+    emitToGroup(group_id, 'trip:created', trip);
     res.status(201).json({ message: 'Trip created successfully', trip });
   } catch (err) {
     next(err);

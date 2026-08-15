@@ -10,7 +10,10 @@ let kafka = null;
 let producer = null;
 let isProducerConnected = false;
 
-const KAFKA_ENABLE = process.env.KAFKA_BROKERS || process.env.KAFKA_ENABLE;
+// Kafka is deliberately opt-in. A stale KAFKA_BROKERS value must not make the
+// production API start retrying broker connections when no Kafka deployment is
+// running.
+const KAFKA_ENABLE = process.env.KAFKA_ENABLE === 'true';
 
 try {
   if (KAFKA_ENABLE) {
@@ -89,3 +92,4 @@ export const getKafkaHealth = () => {
 };
 
 export const getKafkaInstance = () => kafka;
+export const isKafkaEnabled = () => KAFKA_ENABLE;

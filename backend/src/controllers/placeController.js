@@ -1,5 +1,6 @@
 // src/controllers/placeController.js
 import { supabase } from '../services/supabaseClient.js';
+import { emitToTrip } from '../services/socketService.js';
 
 export const addPlace = async (req, res, next) => {
   try {
@@ -57,6 +58,7 @@ export const addPlace = async (req, res, next) => {
       .select();
 
     if (error) throw error;
+    emitToTrip(trip_id, 'place:added', data[0]);
     res.status(201).json({ message: 'Place added successfully', place: data[0] });
   } catch (err) {
     next(err);
@@ -156,6 +158,7 @@ export const updatePlace = async (req, res, next) => {
       .select();
 
     if (error) throw error;
+    emitToTrip(place.trip_id, 'place:updated', data[0]);
     res.json({ message: 'Place updated successfully', place: data[0] });
   } catch (err) {
     next(err);
@@ -198,6 +201,7 @@ export const deletePlace = async (req, res, next) => {
     const { error } = await supabase.from('places_visited').delete().eq('id', place_id);
     if (error) throw error;
 
+    emitToTrip(place.trip_id, 'place:deleted', { id: place_id, deleted_by: username });
     res.json({ message: 'Place deleted successfully' });
   } catch (err) {
     next(err);

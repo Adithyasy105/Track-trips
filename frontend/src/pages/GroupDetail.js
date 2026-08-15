@@ -29,6 +29,7 @@ import {
 } from '../services/api';
 
 import { useAuth } from '../context/AuthContext';
+import { useGroupSocket } from '../hooks/useSocket';
 
 import QRCode from 'react-qr-code';
 
@@ -194,6 +195,8 @@ export const GroupDetail = () => {
       setLoading(false);
     }
   }, [id]);
+
+  useGroupSocket([id], loadGroupData);
 
 
   useEffect(() => {

@@ -3,6 +3,7 @@ import { supabase } from '../services/supabaseClient.js';
 import { syncPendingPaymentsForTrip } from './paymentsController.js';
 import { invalidateTripCaches } from '../services/redisClient.js';
 import { emitToTrip } from '../services/socketService.js';
+import { isKafkaEnabled } from '../services/kafkaProducer.js';
 import { resolveExpenseAllocations, normalizeParticipants, toPaise } from '../utils/splitEngine.js';
 
 const normalizeSplitData = (value) => {
@@ -142,16 +143,24 @@ export const addExpense = async (req, res, next) => {
 
     let newExpenseRecord = null;
 
-    const { data: rpcData, error: rpcError } = await supabase.rpc('insert_expense_with_outbox', {
-      p_trip_id: trip_id,
-      p_payer_username: payer_username,
-      p_amount: amount,
-      p_description: description,
-      p_category: category,
-      p_participants: normalizedParticipants,
-      p_split_type: splitType,
-      p_split_data: splitData,
-    });
+    let rpcData = null;
+    let rpcError = null;
+
+    // The transactional outbox is only needed while Kafka is explicitly enabled.
+    // Without Kafka, write the expense directly so pending outbox rows do not
+    // accumulate in Supabase.
+    if (isKafkaEnabled()) {
+      ({ data: rpcData, error: rpcError } = await supabase.rpc('insert_expense_with_outbox', {
+        p_trip_id: trip_id,
+        p_payer_username: payer_username,
+        p_amount: amount,
+        p_description: description,
+        p_category: category,
+        p_participants: normalizedParticipants,
+        p_split_type: splitType,
+        p_split_data: splitData,
+      }));
+    }
 
     if (!rpcError && rpcData) {
       newExpenseRecord = rpcData;
