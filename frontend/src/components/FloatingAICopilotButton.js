@@ -116,18 +116,29 @@ export const FloatingAICopilotButton = () => {
       {isMobile && isExpensesTab && !expenseModalOpen && (
         <motion.button
           onClick={handleExpenseClick}
-          initial={{ scale: 0.45, opacity: 0 }}
+          initial={{ scale: 0.7, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.94 }}
-          transition={{ type: 'spring', stiffness: 420, damping: 20, mass: 0.7 }}
+          whileHover={{ scale: 1.12 }}
+          whileTap={{ scale: 0.88 }}
+          transition={{ type: 'spring', stiffness: 550, damping: 12, mass: 0.5, duration: 0.25 }}
           aria-label="Quick add expense"
           title="Quick add expense"
-          className="relative flex items-center justify-center rounded-full bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-600/30 hover:shadow-primary-600/40 border border-primary-500/30 text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 cursor-pointer"
+          className="relative flex items-center justify-center rounded-full bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-600/30 hover:shadow-primary-600/40 border border-primary-500/30 text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 cursor-pointer will-change-transform"
           style={{ width: '52px', height: '52px' }}
         >
-          <FaPlus className="h-4 w-4" />
-          <span className="absolute inset-0 rounded-full ring-2 ring-primary-300/60 animate-ping" />
+          <motion.div
+            initial={{ rotate: -15 }}
+            animate={{ rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 600, damping: 10, mass: 0.4 }}
+          >
+            <FaPlus className="h-4 w-4" />
+          </motion.div>
+          <motion.span 
+            initial={{ scale: 0, opacity: 1 }}
+            animate={{ scale: 1.8, opacity: 0 }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
+            className="absolute inset-0 rounded-full border-2 border-primary-400/40" 
+          />
         </motion.button>
       )}
 
