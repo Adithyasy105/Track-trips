@@ -9,18 +9,20 @@ import { supabase } from './supabaseClient.js';
 let io = null;
 let redisAdapterAttached = false;
 
+// TEMPORARILY disabled for single-instance deployments.
+// Re-enable later when the app is intentionally running multiple backend instances
+// behind a load balancer and Redis pub/sub is required for cross-instance Socket.IO sync.
 const attachRedisAdapter = () => {
-  if (!io || redisAdapterAttached || !isRedisReady() || !redis) return;
-
-  try {
-    const pubClient = redis.duplicate();
-    const subClient = redis.duplicate();
-    io.adapter(createAdapter(pubClient, subClient));
-    redisAdapterAttached = true;
-    console.log('[Socket.io] Redis adapter attached for cross-instance real-time pub/sub');
-  } catch (err) {
-    console.warn('[Socket.io] Redis adapter failed; using in-memory adapter:', err.message);
-  }
+  // if (!io || redisAdapterAttached || !isRedisReady() || !redis) return;
+  // try {
+  //   const pubClient = redis.duplicate();
+  //   const subClient = redis.duplicate();
+  //   io.adapter(createAdapter(pubClient, subClient));
+  //   redisAdapterAttached = true;
+  //   console.log('[Socket.io] Redis adapter attached for cross-instance real-time pub/sub');
+  // } catch (err) {
+  //   console.warn('[Socket.io] Redis adapter failed; using in-memory adapter:', err.message);
+  // }
 };
 
 export const initSocket = (httpServer) => {
@@ -37,24 +39,30 @@ export const initSocket = (httpServer) => {
     transports: ['websocket'], // Force WebSocket transport (AWS ALB friendly)
   });
 
-  // Attach Redis adapter for horizontal scaling across multi-instance ECS Fargate
-  if (isRedisReady() && redis) {
-    try {
-      const pubClient = redis.duplicate();
-      const subClient = redis.duplicate();
-      io.adapter(createAdapter(pubClient, subClient));
-      redisAdapterAttached = true;
-      console.log('[Socket.io] 🔄 Redis Adapter attached for cross-instance real-time pub/sub');
-    } catch (err) {
-      console.warn('[Socket.io] ⚠️ Redis Adapter failed, falling back to in-memory adapter:', err.message);
-    }
-  } else {
-    console.log('[Socket.io] ℹ️ Running with default in-memory adapter (Redis offline or local mode)');
+  // Redis Socket.IO adapter is intentionally disabled for now.
+  // This keeps single-instance deployments stable and avoids startup crashes.
+  // Re-enable this block when you are ready for multi-instance Socket.IO synchronization.
+  if (false) {
+    // if (isRedisReady() && redis) {
+    //   try {
+    //     const pubClient = redis.duplicate();
+    //     const subClient = redis.duplicate();
+    //     io.adapter(createAdapter(pubClient, subClient));
+    //     redisAdapterAttached = true;
+    //     console.log('[Socket.io] 🔄 Redis Adapter attached for cross-instance real-time pub/sub');
+    //   } catch (err) {
+    //     console.warn('[Socket.io] ⚠️ Redis Adapter failed, falling back to in-memory adapter:', err.message);
+    //   }
+    // } else {
+    //   console.log('[Socket.io] ℹ️ Running with default in-memory adapter (Redis offline or local mode)');
+    // }
   }
 
+  console.log('[Socket.io] ℹ️ Running with default in-memory adapter (single-instance deployment)');
+
   // Managed Redis often becomes ready after the HTTP server starts.
-  // Attach the adapter at that point instead of staying in single-instance mode.
-  onRedisReady(attachRedisAdapter);
+  // Adapter re-enable hook remains commented out intentionally for now.
+  // onRedisReady(attachRedisAdapter);
 
   // Socket Authentication Middleware
   io.use((socket, next) => {
