@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 
-export const useSocket = (tripId, onExpenseAdded, onExpenseDeleted, onSettlementUpdated, onPlaceChanged) => {
+export const useSocket = (tripId, onExpenseAdded, onExpenseDeleted, onSettlementUpdated, onPlaceChanged, onPaymentChanged) => {
   const socketRef = useRef(null);
 
   useEffect(() => {
@@ -64,6 +64,10 @@ export const useSocket = (tripId, onExpenseAdded, onExpenseDeleted, onSettlement
       if (onPlaceChanged) onPlaceChanged(data);
     });
 
+    ['payment:initiated', 'payment:updated', 'payment:awaiting_confirmation', 'payment:completed'].forEach((event) => {
+      socket.on(event, (data) => { if (onPaymentChanged) onPaymentChanged(data); });
+    });
+
     socket.on('place:updated', (data) => {
       if (onPlaceChanged) onPlaceChanged(data);
     });
@@ -83,7 +87,7 @@ export const useSocket = (tripId, onExpenseAdded, onExpenseDeleted, onSettlement
         console.log('[Socket.io Client] Disconnected from trip room');
       }
     };
-  }, [tripId, onExpenseAdded, onExpenseDeleted, onSettlementUpdated, onPlaceChanged]);
+  }, [tripId, onExpenseAdded, onExpenseDeleted, onSettlementUpdated, onPlaceChanged, onPaymentChanged]);
 
   return socketRef.current;
 };

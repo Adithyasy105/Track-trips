@@ -13,6 +13,7 @@ const RESET_SECRET = getJwtSecret();
 
 // Fallback in-memory OTP store if Redis is offline
 const fallbackOtpStore = new Map();
+const UPI_ID_PATTERN = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9._-]{1,63}$/;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const hashEmailKey = (email) =>
@@ -55,7 +56,7 @@ export const loginUser = async (req, res, next) => {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('username, email, password_hash, full_name')
+      .select('username, email, password_hash, full_name, upi_id')
       .eq('username', username)
       .maybeSingle();
     if (error) throw error;
@@ -67,7 +68,7 @@ export const loginUser = async (req, res, next) => {
     const token = generateToken({ username: user.username, email: user.email });
     res.json({
       message: 'Login successful',
-      user: { username: user.username, email: user.email, full_name: user.full_name },
+      user: { username: user.username, email: user.email, full_name: user.full_name, upi_id: user.upi_id },
       token,
     });
   } catch (err) {
@@ -92,7 +93,7 @@ export const getCurrentUser = async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('username, email, full_name, created_at')
+      .select('username, email, full_name, upi_id, created_at')
       .eq('username', req.user.username)
       .maybeSingle();
     if (error) throw error;
@@ -257,4 +258,16 @@ export const resetPassword = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
+export const updateUpiId = async (req, res, next) => {
+  try {
+    const upi_id = typeof req.body?.upi_id === 'string' ? req.body.upi_id.trim() : '';
+    if (upi_id && !UPI_ID_PATTERN.test(upi_id)) return res.status(400).json({ error: 'Enter a valid UPI ID, for example name@bank.' });
+    const { data, error } = await supabase.from('users').update({ upi_id: upi_id || null })
+      .eq('username', req.user.username).select('username, email, full_name, upi_id, created_at').maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'User not found' });
+    res.json(data);
+  } catch (err) { next(err); }
 };

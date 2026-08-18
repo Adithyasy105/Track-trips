@@ -1,19 +1,30 @@
 // src/components/Layout.js
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { FaMoon, FaSun, FaSignOutAlt, FaHome, FaUsers } from 'react-icons/fa';
+import { FaMoon, FaSun, FaSignOutAlt, FaHome, FaUsers, FaMoneyCheckAlt } from 'react-icons/fa';
+import toast from 'react-hot-toast';
+import { authAPI } from '../services/api';
 import { PWAInstallButton } from './PWAInstallPrompt';
 
 export const Layout = ({ children }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const { darkMode, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const [upiOpen, setUpiOpen] = useState(false);
+  const [upiId, setUpiId] = useState(user?.upi_id || '');
+  const [savingUpi, setSavingUpi] = useState(false);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+  const saveUpi = async (event) => {
+    event.preventDefault();
+    try { setSavingUpi(true); const response = await authAPI.updateUpiId(upiId); updateUser(response.data); setUpiOpen(false); toast.success('UPI ID saved'); }
+    catch (error) { toast.error(error.response?.data?.error || 'Unable to save UPI ID'); }
+    finally { setSavingUpi(false); }
   };
 
   return (
@@ -49,6 +60,7 @@ export const Layout = ({ children }) => {
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 hidden sm:block">
                     @{user.username}
                   </span>
+                  <button onClick={() => { setUpiId(user.upi_id || ''); setUpiOpen(true); }} title="UPI payment settings" className="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-800"><FaMoneyCheckAlt className="h-4 w-4" /></button>
                 </>
               )}
 
@@ -81,6 +93,7 @@ export const Layout = ({ children }) => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full pb-24 sm:pb-12">
         {children}
       </main>
+      {upiOpen && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setUpiOpen(false)}><form onSubmit={saveUpi} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl dark:bg-slate-800"><h2 className="text-lg font-bold">UPI payment settings</h2><p className="mt-1 text-sm text-gray-500">Add the UPI ID others should use to pay you.</p><input value={upiId} onChange={(e) => setUpiId(e.target.value)} className="input-field mt-4" placeholder="name@bank" autoComplete="off" /><div className="mt-4 flex gap-2"><button type="button" className="btn-secondary flex-1" onClick={() => setUpiOpen(false)}>Cancel</button><button disabled={savingUpi} className="btn-primary flex-1">{savingUpi ? 'Saving…' : 'Save UPI ID'}</button></div></form></div>}
     </div>
   );
 };

@@ -9,12 +9,14 @@ import {
 } from 'react-icons/fa';
 import { paymentsAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { UpiPaymentModal } from './UpiPaymentModal';
 
 export const PaymentsTab = ({ tripId }) => {
   const [pendingPayments, setPendingPayments] = useState([]);
   const [completedPayments, setCompletedPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(null);
+  const [upiPayment, setUpiPayment] = useState(null);
   const { user } = useAuth();
   const currentUser = user?.username;
 
@@ -34,7 +36,7 @@ export const PaymentsTab = ({ tripId }) => {
       setLoading(true);
       const response = await paymentsAPI.listTrip(tripId);
       const allPayments = response.data || [];
-      setPendingPayments(allPayments.filter((p) => p.status === 'pending'));
+      setPendingPayments(allPayments.filter((p) => p.status !== 'completed'));
       setCompletedPayments(allPayments.filter((p) => p.status === 'completed'));
     } catch {
       toast.error('Failed to load payments');
@@ -60,6 +62,28 @@ export const PaymentsTab = ({ tripId }) => {
     }
   };
 
+  const handleReject = async (paymentId) => {
+    try {
+      setSaving(paymentId);
+      await paymentsAPI.reject(paymentId);
+      toast.success('Payment returned to pending');
+      await loadPayments();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Unable to reject payment');
+    } finally { setSaving(null); }
+  };
+
+  const beginPayment = async (payment) => {
+    try {
+      setSaving(payment.id);
+      const response = await paymentsAPI.initiate({ trip_id: tripId, to_username: payment.to_username, amount_paise: payment.amount_paise ?? Math.round(Number(payment.amount) * 100) });
+      setUpiPayment(response.data);
+      await loadPayments();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Unable to start this payment');
+    } finally { setSaving(null); }
+  };
+
   const overview = useMemo(() => {
     const pendingTotal = pendingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
     const completedTotal = completedPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -82,6 +106,8 @@ export const PaymentsTab = ({ tripId }) => {
         </span>
       );
     }
+    if (status === 'payment_initiated') return <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Payment initiated</span>;
+    if (status === 'awaiting_receiver_confirmation') return <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">Awaiting receiver confirmation</span>;
     return (
       <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-700/40">
         <FaCheckCircle className="h-2.5 w-2.5" /> Completed
@@ -184,11 +210,16 @@ export const PaymentsTab = ({ tripId }) => {
                     </td>
                     {/* Status */}
                     <td className="py-3 pr-4">
-                      <StatusBadge status="pending" />
+                      <StatusBadge status={payment.status} />
                     </td>
                     {/* Action */}
                     <td className="py-3">
-                      {currentUser === payment.to_username ? (
+                      {currentUser === payment.from_username && ['pending', 'payment_initiated'].includes(payment.status) ? (
+                        <button onClick={() => beginPayment(payment)} disabled={saving === payment.id} className="btn-primary text-xs py-1.5 px-3">
+                          {saving === payment.id ? 'Preparing…' : payment.status === 'pending' ? `Pay ${formatAmount(payment.amount)}` : 'Continue / Try Again'}
+                        </button>
+                      ) : currentUser === payment.to_username && payment.status === 'awaiting_receiver_confirmation' ? (
+                        <div className="flex gap-2">
                         <button
                           onClick={() => handleMarkReceived(payment.id)}
                           disabled={saving === payment.id}
@@ -197,10 +228,10 @@ export const PaymentsTab = ({ tripId }) => {
                           <FaCheckCircle className="h-3 w-3" />
                           {saving === payment.id ? 'Marking…' : 'Mark Received'}
                         </button>
+                        {payment.status === 'awaiting_receiver_confirmation' && <button onClick={() => handleReject(payment.id)} disabled={saving === payment.id} className="btn-secondary text-xs py-1.5 px-3">Reject</button>}
+                        </div>
                       ) : (
-                        <span className="text-xs text-gray-400 dark:text-gray-500 italic">
-                          Awaiting receiver
-                        </span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 italic">{payment.status === 'awaiting_receiver_confirmation' ? 'Awaiting receiver confirmation' : 'No action needed'}</span>
                       )}
                     </td>
                   </tr>
@@ -275,6 +306,7 @@ export const PaymentsTab = ({ tripId }) => {
           </div>
         )}
       </div>
+      {upiPayment && <UpiPaymentModal payment={upiPayment} onClose={() => setUpiPayment(null)} onUpdated={loadPayments} />}
     </div>
   );
 };

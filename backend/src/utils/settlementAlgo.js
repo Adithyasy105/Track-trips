@@ -17,6 +17,9 @@ export function filterValidExpenses(expenses, memberSet) {
 }
 
 export function computeSettlements(validExpenses, memberSet, completedPayments = []) {
+  const paymentPaise = (payment) => Number.isSafeInteger(payment?.amount_paise)
+    ? payment.amount_paise
+    : Math.round(Number(payment?.amount || 0) * 100);
   const paidPaise = {};
   const owesPaise = {};
 
@@ -56,7 +59,7 @@ export function computeSettlements(validExpenses, memberSet, completedPayments =
   for (const payment of completedPayments || []) {
     const from = payment.from_username;
     const to = payment.to_username;
-    const amountPaise = Math.round(Number(payment.amount || 0) * 100);
+    const amountPaise = paymentPaise(payment);
     if (from && netPaise[from] !== undefined) netPaise[from] += amountPaise;
     if (to && netPaise[to] !== undefined) netPaise[to] -= amountPaise;
   }
@@ -69,10 +72,10 @@ export function computeSettlements(validExpenses, memberSet, completedPayments =
     // components instead of changing net independently.
     const completedOutgoingPaise = (completedPayments || [])
       .filter((payment) => payment?.from_username === username)
-      .reduce((sum, payment) => sum + Math.round(Number(payment?.amount || 0) * 100), 0);
+      .reduce((sum, payment) => sum + paymentPaise(payment), 0);
     const completedIncomingPaise = (completedPayments || [])
       .filter((payment) => payment?.to_username === username)
-      .reduce((sum, payment) => sum + Math.round(Number(payment?.amount || 0) * 100), 0);
+      .reduce((sum, payment) => sum + paymentPaise(payment), 0);
 
     balances[username] = {
       paid: Number(((paidPaise[username] + completedOutgoingPaise) / 100).toFixed(2)),

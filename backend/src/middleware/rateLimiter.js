@@ -120,3 +120,10 @@ export const authRateLimiter = createRateLimiter({
   windowSeconds: 1800,
   prefix: 'ratelimit:auth',
 });
+
+export const paymentRateLimiter = createRateLimiter({
+  maxRequests: 20,
+  cooldownSeconds: 1,
+  windowSeconds: 300,
+  prefix: 'ratelimit:payments',
+});

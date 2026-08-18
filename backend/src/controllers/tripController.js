@@ -626,6 +626,12 @@ export const deleteTrip = async (req, res, next) => {
     const snapshot = buildSettlementSnapshot(expensesResult.data || [], memberSet, completedPayments);
     const pendingSettlements = snapshot.settlements || [];
 
+    if (completedPayments.length > 0) {
+      return res.status(400).json({
+        error: 'Cannot delete a trip with completed payment history.',
+      });
+    }
+
     if (pendingPayments.length > 0 || pendingSettlements.length > 0) {
       const balances = snapshot.balances || {};
       const detailMsg = Object.entries(balances)

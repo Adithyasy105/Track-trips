@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node test_payment_audit.mjs && node test_settlement_consistency.mjs && node test_split_engine.mjs",
     "install-deps": "npm install",
     "verify": "node --version && npm --version"
   },

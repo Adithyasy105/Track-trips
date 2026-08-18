@@ -18,6 +18,9 @@ import toast from 'react-hot-toast';
 import { FaArrowRight, FaRupeeSign } from 'react-icons/fa';
 import { HiSparkles } from 'react-icons/hi2';
 import { settlementsAPI, aiAPI } from '../../services/api';
+import { paymentsAPI } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { UpiPaymentModal } from './UpiPaymentModal';
 
 const formatINR = (amount) => {
   const abs = Math.abs(amount);
@@ -64,6 +67,20 @@ export const SettlementsTab = ({ tripId }) => {
   const [loading, setLoading] = useState(true);
   const [aiExplanation, setAiExplanation] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [openingSettlement, setOpeningSettlement] = useState(null);
+  const [upiPayment, setUpiPayment] = useState(null);
+  const { user } = useAuth();
+
+  const beginPayment = async (settlement) => {
+    try {
+      setOpeningSettlement(settlement);
+      const amount_paise = Math.round(Number(settlement.amount) * 100);
+      const response = await paymentsAPI.initiate({ trip_id: tripId, to_username: settlement.to, amount_paise });
+      setUpiPayment(response.data);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Unable to start this payment');
+    } finally { setOpeningSettlement(null); }
+  };
 
   const loadSettlements = useCallback(async () => {
     try {
@@ -289,7 +306,7 @@ export const SettlementsTab = ({ tripId }) => {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.04, duration: 0.18 }}
-                className="group flex items-center justify-between gap-2 rounded-xl border border-sky-200/80 bg-sky-50/60 p-2.5 shadow-xs transition-all duration-200 hover:border-sky-400 dark:border-slate-700/80 dark:bg-slate-900/60 dark:hover:border-sky-600 sm:gap-3 sm:p-3.5"
+                className="group flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200/80 bg-sky-50/60 p-2.5 shadow-xs transition-all duration-200 hover:border-sky-400 dark:border-slate-700/80 dark:bg-slate-900/60 dark:hover:border-sky-600 sm:gap-3 sm:p-3.5"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2.5">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-rose-200 bg-rose-100 text-[10px] font-extrabold text-rose-700 dark:border-rose-800/60 dark:bg-rose-950/60 dark:text-rose-300 sm:h-9 sm:w-9 sm:rounded-xl">
@@ -321,6 +338,18 @@ export const SettlementsTab = ({ tripId }) => {
                     {(settlement.to || '?').charAt(0).toUpperCase()}
                   </div>
                 </div>
+                {settlement.activePayment && (
+                  <p className="w-full text-right text-[11px] font-medium text-violet-700 dark:text-violet-300">Payment in progress: ₹{((settlement.activePayment.amount_paise ?? Math.round(Number(settlement.activePayment.amount || 0) * 100)) / 100).toFixed(2)} ({settlement.activePayment.from_username} → {settlement.activePayment.to_username})</p>
+                )}
+                {user?.username === settlement.from && settlement.receiverUpiId && !settlement.activePayment && (
+                  <button onClick={() => beginPayment(settlement)} disabled={openingSettlement === settlement}
+                    className="btn-primary ml-auto w-full py-2 text-xs sm:ml-0 sm:w-auto sm:px-4">
+                    {openingSettlement === settlement ? 'Preparing…' : `Pay ₹${Number(settlement.amount).toFixed(2)}`}
+                  </button>
+                )}
+                {user?.username === settlement.from && !settlement.receiverUpiId && (
+                  <p className="w-full text-right text-[11px] font-medium text-amber-700 dark:text-amber-300">@{settlement.to} has not added a UPI ID yet.</p>
+                )}
               </motion.div>
             ))}
           </div>
@@ -338,6 +367,7 @@ export const SettlementsTab = ({ tripId }) => {
           </p>
         </div>
       )}
+      {upiPayment && <UpiPaymentModal payment={upiPayment} onClose={() => setUpiPayment(null)} onUpdated={loadSettlements} />}
     </div>
   );
 };

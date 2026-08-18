@@ -83,6 +83,7 @@ export const authAPI = {
   register: (data) => api.post('/users/register', data),
   login: (data) => api.post('/users/login', data),
   getCurrentUser: () => api.get('/users/me'),
+  updateUpiId: (upi_id) => api.patch('/users/me/upi-id', { upi_id }),
   forgotPassword: (data) => api.post('/users/forgot-password', data),
   resetPassword: (data) => api.post('/users/reset-password', data),
 };
@@ -127,7 +128,9 @@ export const settlementsAPI = {
 // Payments API
 export const paymentsAPI = {
   listTrip: (tripId) => api.get(`/payments/trip/${tripId}`),
-  create: (payload) => api.post(`/payments`, payload),
+  initiate: (payload) => api.post('/payments/initiate', payload),
+  claimPaid: (paymentId) => api.post(`/payments/${paymentId}/claim-paid`),
+  reject: (paymentId) => api.post(`/payments/${paymentId}/reject`),
   complete: (paymentId) => api.patch(`/payments/${paymentId}/complete`),
   reset: (tripId, options = { mode: 'soft' }) => api.post(`/payments/trip/${tripId}/reset`, options),
 };
