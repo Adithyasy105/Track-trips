@@ -8,15 +8,8 @@ export const getTripSettlements = async (req, res, next) => {
     const { trip_id } = req.params;
     const username = req.user.username;
 
-    // Check Redis cache first
     const cacheKey = `settlements:trip:${trip_id}`;
-    const cachedSettlements = await getCache(cacheKey);
-    if (cachedSettlements) {
-      console.log(`[Redis HIT] Returned cached settlements for trip ${trip_id}`);
-      return res.json(cachedSettlements);
-    }
-
-    // Verify trip exists — use maybeSingle() so missing trip returns null (not a 406 crash)
+    // Authorize before reading a cache entry so cached trip data cannot bypass membership checks.
     const { data: trip, error: tripError } = await supabase
       .from('trips')
       .select('group_id')
@@ -28,13 +21,19 @@ export const getTripSettlements = async (req, res, next) => {
 
     // Verify requester is a group member
     const { data: membership } = await supabase
-      .from('group_members')
+      .from('trip_members')
       .select('username')
-      .eq('group_id', trip.group_id)
+      .eq('trip_id', trip_id)
       .eq('username', username)
       .maybeSingle();
 
-    if (!membership) return res.status(403).json({ error: 'You are not a member of this group' });
+    if (!membership) return res.status(403).json({ error: 'You are not a member of this trip' });
+
+    const cachedSettlements = await getCache(cacheKey);
+    if (cachedSettlements) {
+      console.log(`[Redis HIT] Returned cached settlements for trip ${trip_id}`);
+      return res.json(cachedSettlements);
+    }
 
     // Fetch trip members, expenses, and completed payments in parallel
     const [membersResult, expensesResult, completedResult] = await Promise.all([
@@ -77,7 +76,9 @@ export const getTripSettlements = async (req, res, next) => {
     const responsePayload = {
       balances: snapshot.balances,
       settlements: snapshot.settlements.map((settlement) => {
-        const amountPaise = Math.round(Number(settlement.amount) * 100);
+        const amountPaise = Number.isSafeInteger(settlement.amountPaise)
+          ? settlement.amountPaise
+          : Math.round(Number(settlement.amount) * 100);
         const pairKey = `${settlement.from}:${settlement.to}`;
         return { ...settlement, amountPaise, receiverUpiId: upiByUsername.get(settlement.to) || null, activePayment: activeByPair.get(pairKey) || null };
       }),

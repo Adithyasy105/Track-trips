@@ -173,7 +173,7 @@ console.log('\n=== SETTLEMENT CONSISTENCY TESTS ===\n');
   assert.equal(result.settlements.length, 1);
   assert.deepEqual(result.balances.adi, { paid: 1250, owes: 775, net: 475 });
   assert.deepEqual(result.balances.tester2, { paid: 300, owes: 775, net: -475 });
-  assert.deepEqual(result.settlements[0], { from: 'tester2', to: 'adi', amount: 475 });
+  assert.deepEqual(result.settlements[0], { from: 'tester2', to: 'adi', amountPaise: 47500, amount: 475 });
   assert.equal(result.balances.adi.net, result.balances.adi.paid - result.balances.adi.owes);
   assert.equal(result.balances.tester2.net, result.balances.tester2.paid - result.balances.tester2.owes);
   assert.equal(result.balances.adi.net + result.balances.tester2.net, 0);

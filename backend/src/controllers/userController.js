@@ -5,7 +5,7 @@ import { hashPassword, comparePassword } from '../utils/hash.js';
 import { generateToken, getJwtSecret } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
 import { sendMail } from '../services/mailer.js';
-import { redis, isRedisReady } from '../services/redisClient.js';
+import { redis, isRedisReady, invalidateTripCaches } from '../services/redisClient.js';
 
 // ─── OTP constants ────────────────────────────────────────────────────────────
 const OTP_HMAC_SECRET = process.env.OTP_HMAC_SECRET || getJwtSecret();
@@ -268,6 +268,12 @@ export const updateUpiId = async (req, res, next) => {
       .eq('username', req.user.username).select('username, email, full_name, upi_id, created_at').maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'User not found' });
+    const { data: tripMemberships, error: tripError } = await supabase.from('trip_members').select('trip_id').eq('username', req.user.username);
+    if (tripError) {
+      console.warn('[UPI] Updated UPI ID but could not enumerate trip caches:', tripError.message);
+    } else {
+      await Promise.all((tripMemberships || []).map(({ trip_id }) => invalidateTripCaches(trip_id)));
+    }
     res.json(data);
   } catch (err) { next(err); }
 };

@@ -26,13 +26,14 @@ const attachRedisAdapter = () => {
 };
 
 export const initSocket = (httpServer) => {
+  const socketOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+    : process.env.NODE_ENV === 'production'
+      ? []
+      : ['http://localhost:3000', 'http://localhost:3001'];
   io = new Server(httpServer, {
     cors: {
-      origin: [
-        'https://track-trips.vercel.app',
-        'http://localhost:3000',
-        'http://localhost:3001',
-      ],
+      origin: socketOrigins,
       credentials: true,
       methods: ['GET', 'POST'],
     },

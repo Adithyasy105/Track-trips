@@ -31,13 +31,15 @@ initSocket(server);
 
 // Dynamic CORS configuration driven by environment variables
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : [
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : process.env.NODE_ENV === 'production'
+    ? []
+    : [
       'https://track-trips.vercel.app',
       'http://localhost:3000',
       'http://localhost:3001',
       'https://f7cnk26r-3000.inc1.devtunnels.ms',
-    ];
+      ];
 
 const corsOptions = {
   origin: (origin, callback) => {

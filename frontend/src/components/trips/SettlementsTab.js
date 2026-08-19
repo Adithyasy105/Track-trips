@@ -74,7 +74,10 @@ export const SettlementsTab = ({ tripId }) => {
   const beginPayment = async (settlement) => {
     try {
       setOpeningSettlement(settlement);
-      const amount_paise = Math.round(Number(settlement.amount) * 100);
+      const amount_paise = Number(settlement.amountPaise);
+      if (!Number.isSafeInteger(amount_paise) || amount_paise <= 0) {
+        throw new Error('Settlement amount is unavailable. Refresh and try again.');
+      }
       const response = await paymentsAPI.initiate({ trip_id: tripId, to_username: settlement.to, amount_paise });
       setUpiPayment(response.data);
     } catch (error) {
@@ -344,7 +347,7 @@ export const SettlementsTab = ({ tripId }) => {
                 {user?.username === settlement.from && settlement.receiverUpiId && !settlement.activePayment && (
                   <button onClick={() => beginPayment(settlement)} disabled={openingSettlement === settlement}
                     className="btn-primary ml-auto w-full py-2 text-xs sm:ml-0 sm:w-auto sm:px-4">
-                    {openingSettlement === settlement ? 'Preparing…' : `Pay ₹${Number(settlement.amount).toFixed(2)}`}
+                    {openingSettlement === settlement ? 'Preparing…' : `Pay ₹${(settlement.amountPaise / 100).toFixed(2)}`}
                   </button>
                 )}
                 {user?.username === settlement.from && !settlement.receiverUpiId && (

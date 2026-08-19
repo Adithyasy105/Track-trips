@@ -24,10 +24,10 @@ const calculateSettlements = async (tripId) => {
 };
 
 export const verifyTripMember = async (tripId, username) => {
-  const { data: trip, error } = await supabase.from('trips').select('group_id').eq('id', tripId).maybeSingle();
+  const { data: trip, error } = await supabase.from('trips').select('id').eq('id', tripId).maybeSingle();
   if (error) throw error;
   if (!trip) return { code: 404, error: 'Trip not found', reason: 'TRIP_NOT_FOUND' };
-  const { data: member, error: memberError } = await supabase.from('group_members').select('username').eq('group_id', trip.group_id).eq('username', username).maybeSingle();
+  const { data: member, error: memberError } = await supabase.from('trip_members').select('username').eq('trip_id', tripId).eq('username', username).maybeSingle();
   if (memberError) throw memberError;
   return member ? null : { code: 403, error: 'You are not a current trip member', reason: 'NOT_TRIP_MEMBER' };
 };
@@ -58,7 +58,7 @@ export const syncPendingPaymentsForTrip = async (tripId, actorUsername) => {
   const { error: removeError } = await supabase.from('payments').delete().eq('trip_id', tripId).eq('status', 'pending').not('settlement_key', 'is', null);
   if (removeError) throw removeError;
   const rows = settlements.map((item) => {
-    const paise = toPaise(item.amount);
+    const paise = Number.isSafeInteger(item.amountPaise) ? item.amountPaise : toPaise(item.amount);
     return { trip_id: tripId, from_username: item.from, to_username: item.to, amount: paise / 100, amount_paise: paise,
       settlement_key: settlementKey(tripId, item.from, item.to, paise), status: 'pending', created_by: actorUsername || item.from };
   }).filter((row) => !activePairs.has(`${row.from_username}:${row.to_username}`));
@@ -88,7 +88,7 @@ export const initiateSettlementPayment = async (req, res, next) => {
     if (!tripId || !requestedReceiver || !Number.isSafeInteger(paise) || paise <= 0) return fail(res, 400, 'INVALID_PAYMENT_REQUEST', 'A valid settlement is required');
     const denied = await verifyTripMember(tripId, payer);
     if (denied) return fail(res, denied.code, denied.reason, denied.error);
-    const settlement = (await calculateSettlements(tripId)).find((item) => sameUser(item.from, payer) && sameUser(item.to, requestedReceiver) && toPaise(item.amount) === paise);
+    const settlement = (await calculateSettlements(tripId)).find((item) => sameUser(item.from, payer) && sameUser(item.to, requestedReceiver) && (item.amountPaise ?? toPaise(item.amount)) === paise);
     if (!settlement) return fail(res, 409, 'SETTLEMENT_CHANGED', 'This settlement is no longer current. Refresh and try again.');
     const key = settlementKey(tripId, settlement.from, settlement.to, paise);
     const { data: receiver, error: receiverError } = await supabase.from('users').select('username, full_name, upi_id').eq('username', settlement.to).maybeSingle();
@@ -99,6 +99,9 @@ export const initiateSettlementPayment = async (req, res, next) => {
       .in('status', ['pending', 'payment_initiated', 'awaiting_receiver_confirmation']).maybeSingle();
     if (existing.error) throw existing.error;
     let payment = existing.data;
+    if (payment && amountPaiseOf(payment) !== paise) {
+      return fail(res, 409, 'PAYMENT_ALREADY_ACTIVE', 'Another payment attempt is active for this payer and receiver.');
+    }
     if (payment?.status === 'pending') {
       const { data, error } = await supabase.from('payments').update({ status: 'payment_initiated', initiated_at: new Date().toISOString() })
         .eq('id', payment.id).eq('status', 'pending').select().maybeSingle();
@@ -156,7 +159,10 @@ export const rejectPaymentClaim = async (req, res, next) => {
       .eq('id', payment.id).eq('to_username', req.user.username).eq('status', 'awaiting_receiver_confirmation').select().maybeSingle();
     if (error) throw error;
     if (!data) return fail(res, 409, payment.status === 'completed' ? 'PAYMENT_ALREADY_COMPLETED' : 'INVALID_PAYMENT_STATE', 'Payment state changed; refresh and try again.');
-    await emitPaymentChange(data);
+    // Rejection releases the old attempt, then rebuilds the current settlement.
+    // This removes a stale keyed ₹500 instruction and creates the current ₹700 one.
+    await syncPendingPaymentsForTrip(data.trip_id, req.user.username);
+    await emitPaymentChange(data, 'payment:rejected');
     res.json(data);
   } catch (error) { next(error); }
 };

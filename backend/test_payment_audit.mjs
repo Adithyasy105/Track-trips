@@ -23,8 +23,8 @@ assert.equal(isAllowedPaymentTransition('pending', 'completed', { legacyManualPa
 
 const initial = buildSettlementSnapshot(expenses, members, []);
 assert.deepEqual(initial.settlements, [
-  { from: 'b', to: 'a', amount: 500 },
-  { from: 'c', to: 'a', amount: 500 },
+  { from: 'b', to: 'a', amountPaise: 50000, amount: 500 },
+  { from: 'c', to: 'a', amountPaise: 50000, amount: 500 },
 ]);
 
 const changed = buildSettlementSnapshot([
@@ -32,6 +32,20 @@ const changed = buildSettlementSnapshot([
   { payer_username: 'b', amount: 300, participants: ['a', 'b', 'c'], split_type: 'EQUAL', split_data: {} },
 ], members, []);
 assert.equal(changed.settlements.some(({ from, to, amount }) => from === 'b' && to === 'a' && amount === 300), true);
+
+const activePaymentIgnored = buildSettlementSnapshot(expenses, members, []);
+assert.equal(activePaymentIgnored.settlements.some(({ from, to, amountPaise }) => from === 'b' && to === 'a' && amountPaise === 50000), true);
+
+const changedWhileAwaiting = buildSettlementSnapshot([
+  ...expenses,
+  { payer_username: 'a', amount: 600, participants: ['a', 'b', 'c'], split_type: 'EQUAL', split_data: {} },
+], members, []);
+assert.equal(changedWhileAwaiting.settlements.some(({ from, to, amountPaise }) => from === 'b' && to === 'a' && amountPaise === 70000), true);
+
+const onePaise = buildSettlementSnapshot([
+  { payer_username: 'a', amount: 0.03, participants: ['a', 'b'], split_type: 'EXACT', split_data: { amounts: { a: 0.02, b: 0.01 } } },
+], new Set(['a', 'b']), []);
+assert.deepEqual(onePaise.settlements, [{ from: 'b', to: 'a', amountPaise: 1, amount: 0.01 }]);
 
 for (const [amount, expected] of [[0.01, 1], [1.01, 101], [666.67, 66667], [9999.99, 999999]]) {
   assert.equal(Math.round(amount * 100), expected);

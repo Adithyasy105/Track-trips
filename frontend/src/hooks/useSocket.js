@@ -64,7 +64,7 @@ export const useSocket = (tripId, onExpenseAdded, onExpenseDeleted, onSettlement
       if (onPlaceChanged) onPlaceChanged(data);
     });
 
-    ['payment:initiated', 'payment:updated', 'payment:awaiting_confirmation', 'payment:completed'].forEach((event) => {
+    ['payment:initiated', 'payment:updated', 'payment:awaiting_confirmation', 'payment:rejected', 'payment:completed'].forEach((event) => {
       socket.on(event, (data) => { if (onPaymentChanged) onPaymentChanged(data); });
     });
 

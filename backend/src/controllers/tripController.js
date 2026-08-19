@@ -2,6 +2,7 @@
 import { supabase } from '../services/supabaseClient.js';
 import { buildSettlementSnapshot } from '../utils/settlementAlgo.js';
 import { emitToGroup } from '../services/socketService.js';
+import { invalidateTripCaches } from '../services/redisClient.js';
 
 export const createTrip = async (req, res, next) => {
   try {
@@ -181,6 +182,7 @@ export const updateTrip = async (req, res, next) => {
       .select();
 
     if (error) throw error;
+    await invalidateTripCaches(id);
     res.json({ message: 'Trip updated successfully', trip: data[0] });
   } catch (err) {
     next(err);
@@ -312,16 +314,9 @@ export const getTripMembers = async (req, res, next) => {
     const { id } = req.params; // trip id
     const username = req.user.username;
 
-    // Check Redis cache first
     const cacheKey = `members:trip:${id}`;
     const { getCache } = await import('../services/redisClient.js');
-    const cachedMembers = await getCache(cacheKey);
-    if (cachedMembers) {
-      console.log(`[Redis HIT] Returned cached members for trip ${id}`);
-      return res.json(cachedMembers);
-    }
-
-    // Verify requester has access (is in the group's members)
+    // Authorize before reading the cache so cached member lists cannot bypass trip membership.
     const { data: trip, error: tripErr } = await supabase
       .from('trips')
       .select('group_id')
@@ -331,12 +326,18 @@ export const getTripMembers = async (req, res, next) => {
     if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
     const { data: membership } = await supabase
-      .from('group_members')
-      .select('*')
-      .eq('group_id', trip.group_id)
+      .from('trip_members')
+      .select('username')
+      .eq('trip_id', id)
       .eq('username', username)
       .maybeSingle();
-    if (!membership) return res.status(403).json({ error: 'You are not a member of this group' });
+    if (!membership) return res.status(403).json({ error: 'You are not a member of this trip' });
+
+    const cachedMembers = await getCache(cacheKey);
+    if (cachedMembers) {
+      console.log(`[Redis HIT] Returned cached members for trip ${id}`);
+      return res.json(cachedMembers);
+    }
 
     const { data, error } = await supabase
       .from('trip_members')
@@ -671,6 +672,7 @@ export const deleteTrip = async (req, res, next) => {
 
     const { error: delTripErr } = await supabase.from('trips').delete().eq('id', id);
     if (delTripErr) throw delTripErr;
+    await invalidateTripCaches(id);
 
     res.json({ message: 'Trip deleted successfully' });
   } catch (err) {
